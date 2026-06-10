@@ -103,116 +103,6 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 # Deployment
 
 - Laravel can be deployed using [Laravel Cloud](https://cloud.laravel.com/), which is the fastest way to deploy and scale production Laravel applications.
-- This project is currently deployed on a Hetzner VPS, not Laravel Cloud. Cloudflare is used for DNS/proxy/TLS edge in front of the VPS; Cloudflare is not hosting the Laravel app.
-
-## Production Infrastructure
-
-- Domain: `workoutmcp.com`.
-- VPS provider: Hetzner Cloud.
-- Production server: `apps-01`.
-- Production SSH target: `root@167.233.74.248`.
-- Public app URL: `https://workoutmcp.com`.
-- Web server: Caddy.
-- PHP runtime: PHP 8.5 FPM.
-- Database: SQLite at `/srv/apps/workout-memory-mcp/database/database.sqlite`.
-- Queue worker: `workout-memory-queue.service`.
-- Local database backup timer: `workout-memory-db-backup.timer`.
-
-## Cloudflare Setup
-
-- Cloudflare owns DNS for `workoutmcp.com`.
-- DNS records should point at the Hetzner VPS:
-  - `A workoutmcp.com -> 167.233.74.248`, proxied.
-  - `A www.workoutmcp.com -> 167.233.74.248`, proxied.
-- Caddy serves the apex domain and redirects `www.workoutmcp.com` to `https://workoutmcp.com{uri}`.
-- Do not try to deploy the Laravel app to Cloudflare Pages/Workers for this project. The app needs PHP-FPM, Composer dependencies, Laravel queues, and SQLite writes, so the VPS is the runtime.
-
-## Production Deploy Runbook
-
-Automatic deploys are configured through GitHub Actions in `.github/workflows/deploy.yml`. A push to `main` runs Composer install, builds Vite assets, runs the PHPUnit suite, syncs the app to Hetzner with `rsync`, runs migrations, rebuilds Laravel caches, restarts the queue worker, reloads PHP-FPM, and verifies the public health/OAuth metadata endpoints.
-
-The workflow expects these repository secrets:
-
-- `HETZNER_HOST`: `167.233.74.248`
-- `HETZNER_USER`: `deploy`
-- `HETZNER_PATH`: `/srv/apps/workout-memory-mcp`
-- `HETZNER_SSH_KEY`: private SSH key for the server `deploy` user
-
-The server has a non-root `deploy` user for GitHub Actions. The app tree is owned by `deploy:www-data`, writable runtime directories use the setgid bit, and `/etc/sudoers.d/workoutmcp-deploy` only allows the deploy user to reload `php8.5-fpm`, restart `workout-memory-queue.service`, and check the queue service status without a password.
-
-Deploys require a shell that is allowed to open outbound SSH connections to `root@167.233.74.248` on port 22. If a Codex chat or sandbox returns `ssh: connect to host 167.233.74.248 port 22: Operation not permitted`, stop there: that is a local environment/network permission block before SSH authentication, not a Hetzner, Cloudflare, or app failure. Run the deploy from this desktop workspace, from a local terminal with the Hetzner SSH key, or from another environment with outbound SSH allowed.
-
-1. Build frontend assets locally before syncing:
-
-```shell
-npm run build
-```
-
-2. Sync the app to Hetzner with generated/runtime files excluded. Do not sync `.env`, `vendor`, `node_modules`, SQLite data, `storage` runtime files, or `bootstrap/cache`.
-
-```shell
-rsync -az --delete \
-  --exclude='.env' \
-  --exclude='.env.*' \
-  --exclude='vendor/' \
-  --exclude='node_modules/' \
-  --exclude='bootstrap/cache/' \
-  --exclude='database/database.sqlite' \
-  --exclude='storage/logs/' \
-  --exclude='storage/framework/cache/' \
-  --exclude='storage/framework/sessions/' \
-  --exclude='storage/framework/views/' \
-  --exclude='storage/app/' \
-  ./ root@167.233.74.248:/srv/apps/workout-memory-mcp/
-```
-
-3. On the server, install optimized production dependencies when dependencies may have changed, rebuild Laravel caches, restart workers, and reload PHP-FPM. For manual root deploys, preserve `deploy:www-data` ownership so later GitHub Actions deploys can still write the app:
-
-```shell
-ssh root@167.233.74.248 'cd /srv/apps/workout-memory-mcp \
-  && composer install --no-dev --optimize-autoloader \
-  && php artisan migrate --force \
-  && chown -R deploy:www-data storage bootstrap/cache database \
-  && chmod -R ug+rwX storage bootstrap/cache \
-  && chmod ug+rwX database database/database.sqlite \
-  && find storage bootstrap/cache database -type d -exec chmod 2775 {} + \
-  && php artisan config:clear \
-  && php artisan event:clear \
-  && php artisan route:clear \
-  && php artisan view:clear \
-  && php artisan optimize \
-  && php artisan queue:restart \
-  && systemctl reload php8.5-fpm'
-```
-
-If Composer dependencies did not change, `composer dump-autoload --no-dev --optimize` is enough instead of `composer install`.
-
-4. Verify production immediately after every deploy:
-
-```shell
-curl -I https://workoutmcp.com/up
-curl -I https://workoutmcp.com/login
-curl -sS https://workoutmcp.com/.well-known/oauth-authorization-server
-ssh root@167.233.74.248 'cd /srv/apps/workout-memory-mcp && php artisan route:list --path=oauth/authorize -vv'
-ssh root@167.233.74.248 'systemctl is-active workout-memory-queue.service'
-```
-
-Expected OAuth route middleware includes `web`, `auth`, and `throttle:60,1`. The `web` middleware is required so ChatGPT OAuth requests survive the redirect through `/login`.
-
-## Production Gotchas
-
-- Never sync local `bootstrap/cache/packages.php` or `bootstrap/cache/services.php` to production. Local development may include `laravel/boost`; production uses `--no-dev`, so syncing local cache files can crash production with `Class "Laravel\Boost\BoostServiceProvider" not found`.
-- Avoid `php artisan optimize:clear` during normal deploys because it clears the configured cache store. This app stores OAuth client/token state in cache, so `optimize:clear` can force ChatGPT reconnects. Use `config:clear`, `event:clear`, `route:clear`, `view:clear`, then `optimize`.
-- SQLite needs the database directory to be writable, not just the `.sqlite` file. Login, sessions, cache, queues, and OAuth token storage can fail if `/srv/apps/workout-memory-mcp/database` is not writable by the deploy/web server users.
-- Keep `storage`, `bootstrap/cache`, the SQLite file, and the SQLite directory owned by `deploy:www-data` and group writable. Runtime directories should keep mode `2775` so new files inherit the `www-data` group.
-- Production `.env` must remain server-local and should not be overwritten by rsync.
-- Do not add `WORKOUT_MEMORY_OAUTH_APPROVAL_PIN`. OAuth authorization is based on the signed-in Laravel user; there is no separate approval PIN.
-- MCP OAuth depends on these public URLs staying stable:
-  - Protected resource metadata: `https://workoutmcp.com/.well-known/oauth-protected-resource/mcp/workout-memory`
-  - Authorization server metadata: `https://workoutmcp.com/.well-known/oauth-authorization-server`
-  - Authorization endpoint: `https://workoutmcp.com/oauth/authorize`
-  - Token endpoint: `https://workoutmcp.com/oauth/token`
-- Local backups are stored under `/srv/backups/workout-memory-mcp` by the systemd timer. This is not an offsite backup; add Hetzner snapshots or off-server backups before treating this as durable production data.
 
 === laravel/core rules ===
 
@@ -270,3 +160,77 @@ Expected OAuth route middleware includes `web`, `auth`, and `throttle:60,1`. The
 - To filter on a particular test name: `php artisan test --compact --filter=testName` (recommended after making a change to a related file).
 
 </laravel-boost-guidelines>
+
+# Project Guidance: Workout Memory MCP
+
+> Hand-maintained project notes, kept **outside** the Laravel Boost guidelines block above. On `boost:install`, Boost regenerates everything between its `laravel-boost-guidelines` markers but preserves anything after the closing marker — so these notes survive. `CLAUDE.md` is a symlink to this file and inherits them too.
+
+## Deployment Overview
+
+This project runs on a **Hetzner VPS**, not Laravel Cloud. **Cloudflare** provides DNS, TLS proxying, and edge protection in front of the VPS; it does not host the Laravel app. Deploys are automatic on push to `main` (GitHub Actions). The full runbook — server provisioning, Caddy, queue worker, backups, manual fallback, and troubleshooting — lives in [`DEPLOYMENT.md`](DEPLOYMENT.md).
+
+## Production Infrastructure
+
+- Domain: `workoutmcp.com`.
+- VPS provider: Hetzner Cloud.
+- Production server: `apps-01`.
+- Production SSH target: `root@167.233.74.248`.
+- Public app URL: `https://workoutmcp.com`.
+- Web server: Caddy.
+- PHP runtime: PHP 8.5 FPM.
+- Database: SQLite at `/srv/apps/workout-memory-mcp/database/database.sqlite`.
+- Queue worker: `workout-memory-queue.service`.
+- Local database backup timer: `workout-memory-db-backup.timer`.
+
+## Cloudflare Setup
+
+- Cloudflare owns DNS for `workoutmcp.com`.
+- DNS records should point at the Hetzner VPS:
+  - `A workoutmcp.com -> 167.233.74.248`, proxied.
+  - `A www.workoutmcp.com -> 167.233.74.248`, proxied.
+- Caddy serves the apex domain and redirects `www.workoutmcp.com` to `https://workoutmcp.com{uri}`.
+- Do not try to deploy the Laravel app to Cloudflare Pages/Workers for this project. The app needs PHP-FPM, Composer dependencies, Laravel queues, and SQLite writes, so the VPS is the runtime.
+
+## Production Deploys
+
+**Deploys are automatic — just `git push` to `main`.** GitHub Actions (`.github/workflows/deploy.yml`) runs on every push to `main` (and can be started manually via the workflow's `workflow_dispatch`): it installs Composer + npm dependencies, builds Vite assets, and runs the PHPUnit suite — a failing test stops the deploy — then connects to the Hetzner VPS as the `deploy` user, `rsync`s the app across (excluding everything in `.deployignore`), runs migrations, rebuilds Laravel caches, restarts the queue worker, reloads PHP-FPM, and curls the public health + OAuth metadata endpoints to verify. You do not normally SSH into the server to deploy.
+
+The workflow expects these repository secrets:
+
+- `HETZNER_HOST`: `167.233.74.248`
+- `HETZNER_USER`: `deploy`
+- `HETZNER_PATH`: `/srv/apps/workout-memory-mcp`
+- `HETZNER_SSH_KEY`: private SSH key for the server `deploy` user
+
+The server has a non-root `deploy` user for GitHub Actions. The app tree is owned by `deploy:www-data`, writable runtime directories use the setgid bit, and `/etc/sudoers.d/workoutmcp-deploy` only allows the deploy user to reload `php8.5-fpm`, restart `workout-memory-queue.service`, and check the queue service status without a password.
+
+### Manual deploy (fallback only)
+
+Only needed if GitHub Actions is unavailable. The step-by-step manual `rsync` + remote commands live under **Manual Deploy Fallback** in [`DEPLOYMENT.md`](DEPLOYMENT.md). A manual deploy needs a shell allowed to open an outbound SSH connection to the VPS on port 22. If you see `ssh: connect to host 167.233.74.248 port 22: Operation not permitted`, that is a local network/sandbox block *before* SSH authentication — not a Hetzner, Cloudflare, or app failure. Run it from a local terminal that holds the Hetzner deploy key.
+
+### Verify production after a deploy
+
+CI already runs these checks at the end of every deploy, but to confirm by hand:
+
+```shell
+curl -I https://workoutmcp.com/up
+curl -I https://workoutmcp.com/login
+curl -sS https://workoutmcp.com/.well-known/oauth-authorization-server
+```
+
+Expected OAuth route middleware includes `web`, `auth`, and `throttle:60,1`. The `web` middleware is required so ChatGPT OAuth requests survive the redirect through `/login`.
+
+## Production Gotchas
+
+- Never sync local `bootstrap/cache/packages.php` or `bootstrap/cache/services.php` to production. Local development may include `laravel/boost`; production uses `--no-dev`, so syncing local cache files can crash production with `Class "Laravel\Boost\BoostServiceProvider" not found`.
+- Avoid `php artisan optimize:clear` during normal deploys because it clears the configured cache store. This app stores OAuth client/token state in cache, so `optimize:clear` can force ChatGPT reconnects. Use `config:clear`, `event:clear`, `route:clear`, `view:clear`, then `optimize`.
+- SQLite needs the database directory to be writable, not just the `.sqlite` file. Login, sessions, cache, queues, and OAuth token storage can fail if `/srv/apps/workout-memory-mcp/database` is not writable by the deploy/web server users.
+- Keep `storage`, `bootstrap/cache`, the SQLite file, and the SQLite directory owned by `deploy:www-data` and group writable. Runtime directories should keep mode `2775` so new files inherit the `www-data` group.
+- Production `.env` must remain server-local and should not be overwritten by rsync.
+- Do not add `WORKOUT_MEMORY_OAUTH_APPROVAL_PIN`. OAuth authorization is based on the signed-in Laravel user; there is no separate approval PIN.
+- MCP OAuth depends on these public URLs staying stable:
+  - Protected resource metadata: `https://workoutmcp.com/.well-known/oauth-protected-resource/mcp/workout-memory`
+  - Authorization server metadata: `https://workoutmcp.com/.well-known/oauth-authorization-server`
+  - Authorization endpoint: `https://workoutmcp.com/oauth/authorize`
+  - Token endpoint: `https://workoutmcp.com/oauth/token`
+- Local backups are stored under `/srv/backups/workout-memory-mcp` by the systemd timer. This is not an offsite backup; add Hetzner snapshots or off-server backups before treating this as durable production data.
