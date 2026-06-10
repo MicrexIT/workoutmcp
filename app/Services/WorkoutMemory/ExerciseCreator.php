@@ -92,63 +92,38 @@ class ExerciseCreator
             ? $this->visibleExercises($user)->find($input['parent_exercise_id'])
             : null;
 
-        $exercise = Exercise::query()->create([
-            'user_id' => $user->id,
-            'parent_exercise_id' => $parent?->id,
-            'source' => 'user',
-            'name' => $name,
-            'canonical_name' => $name,
-            'normalized_name' => $normalizedName,
-            'category' => $input['category'] ?? 'other',
-            'granularity' => $input['granularity'] ?? 'canonical',
-            'tags' => array_values($input['tags'] ?? []),
-            'primary_muscles' => array_values($input['primary_muscles'] ?? []),
-            'secondary_muscles' => array_values($input['secondary_muscles'] ?? []),
-            'primary_body_area' => $input['primary_body_area'] ?? ($input['primary_muscles'][0] ?? null),
-            'equipment' => array_values($input['equipment'] ?? []),
-            'tracking_mode' => $input['tracking_mode'] ?? 'load_reps',
-            'unilateral' => $input['unilateral'] ?? null,
-            'bodyweight' => $input['bodyweight'] ?? null,
-            'external_load_allowed' => (bool) ($input['external_load_allowed'] ?? false),
-            'variation_notes' => $input['variation_notes'] ?? null,
-            'default_variant_policy' => $input['default_variant_policy'] ?? 'log_variant',
-            'instructions' => $input['instructions'] ?? null,
-            'safety_notes' => $input['safety_notes'] ?? null,
-            'metadata' => [
-                'creation_reason' => $creationReason,
-                'source_phrase' => $sourcePhrase,
-                'reviewed_candidate_ids' => $input['reviewed_candidate_ids'] ?? [],
+        $exercise = $this->createExercise(
+            $user,
+            [
+                'parent_exercise_id' => $parent?->id,
+                'name' => $name,
+                'category' => $input['category'] ?? 'other',
+                'granularity' => $input['granularity'] ?? 'canonical',
+                'tags' => array_values($input['tags'] ?? []),
+                'primary_muscles' => array_values($input['primary_muscles'] ?? []),
+                'secondary_muscles' => array_values($input['secondary_muscles'] ?? []),
+                'primary_body_area' => $input['primary_body_area'] ?? ($input['primary_muscles'][0] ?? null),
+                'equipment' => array_values($input['equipment'] ?? []),
+                'tracking_mode' => $input['tracking_mode'] ?? 'load_reps',
+                'unilateral' => $input['unilateral'] ?? null,
+                'bodyweight' => $input['bodyweight'] ?? null,
+                'external_load_allowed' => (bool) ($input['external_load_allowed'] ?? false),
+                'variation_notes' => $input['variation_notes'] ?? null,
+                'default_variant_policy' => $input['default_variant_policy'] ?? 'log_variant',
+                'instructions' => $input['instructions'] ?? null,
+                'safety_notes' => $input['safety_notes'] ?? null,
+                'metadata' => [
+                    'creation_reason' => $creationReason,
+                    'source_phrase' => $sourcePhrase,
+                    'reviewed_candidate_ids' => $input['reviewed_candidate_ids'] ?? [],
+                ],
             ],
-        ]);
-
-        foreach (array_unique([$name, ...($input['aliases'] ?? [])]) as $alias) {
-            $exercise->aliases()->updateOrCreate(
-                ['normalized_alias' => ExerciseResolver::normalize((string) $alias)],
-                ['alias' => $alias, 'source' => 'user'],
-            );
-        }
-
-        if (($input['phrase_to_remember'] ?? null) !== null || $sourcePhrase !== '') {
-            $phrase = (string) ($input['phrase_to_remember'] ?? $sourcePhrase);
-
-            ExercisePhraseMemory::query()->updateOrCreate(
-                [
-                    'user_id' => $user->id,
-                    'normalized_phrase' => ExerciseResolver::normalize($phrase),
-                ],
-                [
-                    'exercise_id' => $exercise->id,
-                    'phrase' => $phrase,
-                    'confidence' => 0.95,
-                    'usage_count' => 1,
-                    'last_used_at' => now(),
-                ],
-            );
-        }
-
-        if ($attempt !== null) {
-            $attempt->update(['created_exercise_id' => $exercise->id]);
-        }
+            aliases: $input['aliases'] ?? [],
+            phraseToRemember: (string) ($input['phrase_to_remember'] ?? $sourcePhrase) !== ''
+                ? (string) ($input['phrase_to_remember'] ?? $sourcePhrase)
+                : null,
+            attempt: $attempt,
+        );
 
         return [
             'refused' => false,
@@ -159,6 +134,61 @@ class ExerciseCreator
             'recommended_existing_exercise' => null,
             'recommended_bucket_exercise' => null,
         ];
+    }
+
+    /**
+     * Create an exercise without discovery gates. Callers own duplicate checks and visibility rules.
+     *
+     * @param  array<string, mixed>  $attributes
+     * @param  list<string>  $aliases
+     */
+    public function createExercise(
+        User $user,
+        array $attributes,
+        array $aliases = [],
+        ?string $phraseToRemember = null,
+        float $phraseConfidence = 0.95,
+        ?ExerciseResolutionAttempt $attempt = null,
+    ): Exercise {
+        $name = trim((string) ($attributes['name'] ?? ''));
+
+        $exercise = Exercise::query()->create([
+            'source' => 'user',
+            ...$attributes,
+            'user_id' => $user->id,
+            'name' => $name,
+            'canonical_name' => $attributes['canonical_name'] ?? $name,
+            'normalized_name' => ExerciseResolver::normalize($name),
+        ]);
+
+        foreach (array_unique([$name, ...$aliases]) as $alias) {
+            $exercise->aliases()->updateOrCreate(
+                ['normalized_alias' => ExerciseResolver::normalize((string) $alias)],
+                ['alias' => $alias, 'source' => 'user'],
+            );
+        }
+
+        if ($phraseToRemember !== null && trim($phraseToRemember) !== '') {
+            ExercisePhraseMemory::query()->updateOrCreate(
+                [
+                    'user_id' => $user->id,
+                    'normalized_phrase' => ExerciseResolver::normalize($phraseToRemember),
+                ],
+                [
+                    'exercise_id' => $exercise->id,
+                    'phrase' => $phraseToRemember,
+                    'confidence' => $phraseConfidence,
+                    'usage_count' => 1,
+                    'last_used_at' => now(),
+                ],
+            );
+        }
+
+        if ($attempt !== null) {
+            $attempt->update(['created_exercise_id' => $exercise->id]);
+        }
+
+        return $exercise;
     }
 
     /**

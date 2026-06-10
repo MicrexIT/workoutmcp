@@ -14,7 +14,7 @@ use Laravel\Mcp\Server\Tool;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 
 #[Name('resolve_exercise_mentions')]
-#[Description('Resolve raw exercise phrases before logging. This writes short-lived discovery evidence but does not create exercises or workouts. Use this before log_workout or create_exercise.')]
+#[Description('Resolve raw exercise phrases before logging. This writes short-lived discovery evidence but does not create exercises or workouts. Each result includes log_entry_template, which can be copied directly into a log_workout or append_workout_exercise entry, and requires_variant_details for bucket exercises.')]
 #[IsReadOnly]
 class ResolveExerciseMentionsTool extends Tool
 {

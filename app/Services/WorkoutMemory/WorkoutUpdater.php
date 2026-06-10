@@ -42,16 +42,24 @@ class WorkoutUpdater
 
                 if ($validation !== []) {
                     return $this->refused(
-                        'Workout contains unknown, ambiguous, or invalid exercise references. update_workout never creates exercises implicitly.',
+                        'Workout exercise entry is structurally invalid: it needs a raw_phrase or a known exercise_id.',
                         ['unresolved_or_ambiguous_items' => $validation],
                     );
                 }
             }
         }
 
-        DB::transaction(function () use ($user, $session, $operations, $input): void {
+        $outcomes = [];
+
+        DB::transaction(function () use ($user, $session, $operations, $input, &$outcomes): void {
+            $outcomes = [];
+
             foreach ($operations as $operation) {
-                $this->applyOperation($user, $session, $operation);
+                $outcome = $this->applyOperation($user, $session, $operation);
+
+                if ($outcome !== null) {
+                    $outcomes[] = $outcome;
+                }
             }
 
             $session->changeEvents()->create([
@@ -65,6 +73,7 @@ class WorkoutUpdater
         return [
             'refused' => false,
             'refusal_reason' => null,
+            ...$this->exerciseWriter->outcomeSummary($outcomes),
             'updated_workout' => $this->summaries->workout($session->fresh(['exercises.sets', 'exercises.exercise'])),
         ];
     }
@@ -106,9 +115,12 @@ class WorkoutUpdater
 
     /**
      * @param  array<string, mixed>  $operation
+     * @return array<string, mixed>|null resolution outcome for add_exercise operations
      */
-    private function applyOperation(User $user, WorkoutSession $session, array $operation): void
+    private function applyOperation(User $user, WorkoutSession $session, array $operation): ?array
     {
+        $outcome = null;
+
         switch ((string) ($operation['type'] ?? '')) {
             case 'update_session':
                 $session->update(collect($operation)->only([
@@ -120,7 +132,7 @@ class WorkoutUpdater
                 break;
 
             case 'add_exercise':
-                $this->addExercise($user, $session, $operation);
+                $outcome = $this->addExercise($user, $session, $operation);
                 break;
 
             case 'update_exercise':
@@ -147,6 +159,8 @@ class WorkoutUpdater
         if (($operation['type'] ?? '') === 'update_session') {
             $this->updateSessionMetrics($session, $operation);
         }
+
+        return $outcome;
     }
 
     /**
@@ -174,15 +188,16 @@ class WorkoutUpdater
 
     /**
      * @param  array<string, mixed>  $operation
+     * @return array<string, mixed>
      */
-    private function addExercise(User $user, WorkoutSession $session, array $operation): void
+    private function addExercise(User $user, WorkoutSession $session, array $operation): array
     {
-        $this->exerciseWriter->createWorkoutExercise(
+        return $this->exerciseWriter->createWorkoutExercise(
             user: $user,
             session: $session,
             exerciseInput: $operation,
             sortOrder: isset($operation['sort_order']) ? (int) $operation['sort_order'] : null,
-        );
+        )['outcome'];
     }
 
     /**

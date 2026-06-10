@@ -156,11 +156,8 @@ class WorkoutSessionManager
 
         if ($validation !== []) {
             return $this->refused(
-                'Workout contains unknown, ambiguous, or invalid exercise references. append_workout_exercise never creates exercises implicitly.',
-                [
-                    'unresolved_or_ambiguous_items' => $validation,
-                    'suggested_next_tool' => 'resolve_exercise_mentions',
-                ],
+                'Workout exercise entry is structurally invalid: it needs a raw_phrase or a known exercise_id.',
+                ['unresolved_or_ambiguous_items' => $validation],
             );
         }
 
@@ -185,7 +182,7 @@ class WorkoutSessionManager
 
             /** @var WorkoutSession $session */
             $session = $target['session'];
-            $workoutExercise = $this->exerciseWriter->createWorkoutExercise($user, $session, $exerciseInput);
+            ['workout_exercise' => $workoutExercise, 'outcome' => $outcome] = $this->exerciseWriter->createWorkoutExercise($user, $session, $exerciseInput);
             $event = $this->recordEvent($user, $session, 'exercise_appended', $input, [
                 'workout_exercise_id' => $workoutExercise->id,
                 'exercise_id' => $workoutExercise->exercise_id,
@@ -199,6 +196,7 @@ class WorkoutSessionManager
                 'target_resolution' => $target['target_resolution'],
                 'append_event' => $this->eventSummary($event),
                 'appended_exercise_id' => $workoutExercise->id,
+                ...$this->exerciseWriter->outcomeSummary([$outcome]),
                 'session' => $this->summaries->workout($session->fresh(['exercises.sets', 'exercises.exercise', 'changeEvents'])),
             ];
         }, attempts: 3);

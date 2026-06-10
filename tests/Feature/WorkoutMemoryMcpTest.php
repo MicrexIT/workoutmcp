@@ -5,10 +5,14 @@ namespace Tests\Feature;
 use App\Mcp\Servers\WorkoutMemoryServer;
 use App\Mcp\Tools\GetCurrentWorkoutSessionTool;
 use App\Mcp\Tools\GetUserContextTool;
+use App\Mcp\Tools\RememberExercisePhraseTool;
 use App\Mcp\Tools\ResolveExerciseMentionsTool;
 use App\Models\Exercise;
 use App\Models\ExercisePhraseMemory;
+use App\Models\ExerciseResolutionAttempt;
+use App\Models\WorkoutExercise;
 use App\Models\WorkoutSession;
+use App\Models\WorkoutSet;
 use App\Services\WorkoutMemory\CurrentUserResolver;
 use App\Services\WorkoutMemory\ExerciseCreator;
 use App\Services\WorkoutMemory\ExerciseResolver;
@@ -37,6 +41,16 @@ class WorkoutMemoryMcpTest extends TestCase
         $this->assertDatabaseHas('exercise_aliases', ['normalized_alias' => ExerciseResolver::normalize('weighted rings MU')]);
         $this->assertDatabaseHas('exercises', ['name' => 'Handstand Accessory Drill', 'granularity' => 'bucket']);
         $this->assertDatabaseHas('exercises', ['name' => 'Compression Drill', 'granularity' => 'bucket']);
+        $this->assertDatabaseHas('exercises', ['name' => 'Calf Press on Leg Press', 'granularity' => 'canonical']);
+        $this->assertDatabaseHas('exercise_aliases', ['normalized_alias' => ExerciseResolver::normalize('calf press')]);
+        $this->assertDatabaseHas('exercise_aliases', ['normalized_alias' => ExerciseResolver::normalize('calves on leg press')]);
+        $this->assertDatabaseHas('exercise_aliases', ['normalized_alias' => ExerciseResolver::normalize('weighted pistols')]);
+        $this->assertDatabaseHas('exercise_aliases', ['normalized_alias' => ExerciseResolver::normalize('pistol squats')]);
+
+        $pistol = Exercise::query()->where('name', 'Pistol Squat')->firstOrFail();
+        $weightedPistol = Exercise::query()->where('name', 'Weighted Pistol Squat')->firstOrFail();
+        $this->assertSame('variant', $weightedPistol->granularity);
+        $this->assertSame((int) $pistol->id, (int) $weightedPistol->parent_exercise_id);
     }
 
     public function test_resolver_maps_weighted_rings_mu_to_existing_exercise(): void
@@ -160,7 +174,7 @@ class WorkoutMemoryMcpTest extends TestCase
         ]);
     }
 
-    public function test_log_workout_refuses_unresolved_or_mismatched_raw_phrases(): void
+    public function test_log_workout_accepts_mismatched_entries_and_flags_assumptions(): void
     {
         $user = app(CurrentUserResolver::class)->user();
         $plank = Exercise::query()->where('name', 'Plank')->firstOrFail();
@@ -181,7 +195,7 @@ class WorkoutMemoryMcpTest extends TestCase
         ])[0];
 
         $mismatchedEvidence = app(WorkoutLogger::class)->log($user, [
-            'raw_input' => '45 minutes of spinning',
+            'raw_input' => 'another 45 minutes of spinning',
             'exercises' => [[
                 'exercise_id' => $plank->id,
                 'resolution_id' => $resolution['resolution_id'],
@@ -191,13 +205,23 @@ class WorkoutMemoryMcpTest extends TestCase
             ]],
         ]);
 
-        $this->assertTrue($manualAssumption['refused']);
-        $this->assertTrue($mismatchedEvidence['refused']);
-        $this->assertSame(0, WorkoutSession::query()->count());
+        $this->assertFalse($manualAssumption['refused']);
+        $this->assertFalse($mismatchedEvidence['refused']);
+        $this->assertSame(2, WorkoutSession::query()->count());
+        $this->assertSame(2, WorkoutExercise::query()
+            ->where('exercise_id', $plank->id)
+            ->where('resolution_type', 'manual_assumption')
+            ->count());
+        $this->assertSame('assumed', $manualAssumption['resolution_outcomes'][0]['method']);
+        $this->assertSame('Plank', $mismatchedEvidence['assumed_matches'][0]['exercise_name']);
         $this->assertContains(
-            'Exercise id does not match the resolver evidence.',
-            array_column($mismatchedEvidence['unresolved_or_ambiguous_items'], 'message'),
+            'Indoor Ride',
+            array_column($mismatchedEvidence['assumed_matches'][0]['alternatives'], 'exercise_name'),
         );
+        $this->assertDatabaseMissing('exercise_phrase_memories', [
+            'user_id' => $user->id,
+            'normalized_phrase' => ExerciseResolver::normalize('spinning'),
+        ]);
     }
 
     public function test_log_workout_records_spinning_handstand_and_mobility_with_resolution_evidence(): void
@@ -250,16 +274,19 @@ class WorkoutMemoryMcpTest extends TestCase
             ['Indoor Ride', 'Handstand Accessory Drill', 'Mobility Flow'],
             collect($logged['saved_session']['exercises'])->pluck('name')->all(),
         );
+        $this->assertSame(['evidence', 'evidence', 'evidence'], array_column($logged['resolution_outcomes'], 'method'));
+        $this->assertSame([], $logged['auto_created_exercises']);
+        $this->assertSame([], $logged['assumed_matches']);
         $this->assertDatabaseMissing('workout_exercises', ['name_snapshot' => 'Plank']);
         $this->assertDatabaseMissing('workout_exercises', ['name_snapshot' => 'Pike Compression Lift']);
         $this->assertDatabaseMissing('workout_exercises', ['name_snapshot' => 'Bike Erg']);
     }
 
-    public function test_log_workout_refuses_unknown_exercise_and_accepts_bucket_variant(): void
+    public function test_log_workout_handles_unknown_ids_buckets_and_missing_variant_labels(): void
     {
         $user = app(CurrentUserResolver::class)->user();
 
-        $unknown = app(WorkoutLogger::class)->log($user, [
+        $structurallyInvalid = app(WorkoutLogger::class)->log($user, [
             'raw_input' => 'unknown movement 3x10',
             'exercises' => [[
                 'exercise_id' => 99999,
@@ -268,31 +295,312 @@ class WorkoutMemoryMcpTest extends TestCase
             ]],
         ]);
 
-        $this->assertTrue($unknown['refused']);
+        $this->assertTrue($structurallyInvalid['refused']);
+        $this->assertContains(
+            'Entry needs a raw_phrase or a known exercise_id.',
+            array_column($structurallyInvalid['unresolved_or_ambiguous_items'], 'message'),
+        );
 
-        $resolution = app(ExerciseResolver::class)->resolveMentions($user, [
+        $unknownIdWithPhrase = app(WorkoutLogger::class)->log($user, [
+            'raw_input' => 'leg press 3x10 at 100kg',
+            'exercises' => [[
+                'exercise_id' => 99999,
+                'raw_phrase' => 'leg press',
+                'sets' => array_fill(0, 3, ['reps' => 10, 'load_value' => 100, 'load_unit' => 'kg']),
+            ]],
+        ]);
+
+        $this->assertFalse($unknownIdWithPhrase['refused']);
+        $this->assertSame('Leg Press', $unknownIdWithPhrase['resolution_outcomes'][0]['exercise_name']);
+
+        $bucketWithoutVariantDetails = app(WorkoutLogger::class)->log($user, [
+            'raw_input' => 'compression work 10 minutes',
+            'exercises' => [[
+                'raw_phrase' => 'compression work',
+                'sets' => [['duration_seconds' => 600]],
+            ]],
+        ]);
+
+        $this->assertFalse($bucketWithoutVariantDetails['refused']);
+        $this->assertSame('Compression Drill', $bucketWithoutVariantDetails['resolution_outcomes'][0]['exercise_name']);
+        $this->assertTrue($bucketWithoutVariantDetails['resolution_outcomes'][0]['variant_label_autofilled']);
+        $this->assertDatabaseHas('workout_exercises', [
+            'name_snapshot' => 'Compression Drill',
+            'variant_label' => 'compression work',
+        ]);
+
+        $explicitResolution = app(ExerciseResolver::class)->resolveMentions($user, [
             ['raw_phrase' => 'compression work'],
         ])[0];
-        $bucket = Exercise::query()->findOrFail($resolution['recommended_bucket_exercise']['id'] ?? $resolution['exercise']['id']);
+        $bucket = Exercise::query()->findOrFail($explicitResolution['recommended_bucket_exercise']['id'] ?? $explicitResolution['exercise']['id']);
 
-        $logged = app(WorkoutLogger::class)->log($user, [
+        $explicitBucketVariant = app(WorkoutLogger::class)->log($user, [
             'raw_input' => 'compression work: one leg and pancake lifts',
             'exercises' => [[
                 'exercise_id' => $bucket->id,
-                'resolution_id' => $resolution['resolution_id'],
+                'resolution_id' => $explicitResolution['resolution_id'],
                 'raw_phrase' => 'compression work',
-                'resolution_type' => $resolution['resolution'],
+                'resolution_type' => $explicitResolution['resolution'],
                 'variant_label' => 'seated and pancake compression lifts',
                 'variant_description' => 'one-leg seated, both legs, pancake one-leg, pancake both legs',
                 'sets' => [['duration_seconds' => 600]],
             ]],
         ]);
 
-        $this->assertFalse($logged['refused']);
+        $this->assertFalse($explicitBucketVariant['refused']);
         $this->assertDatabaseHas('workout_exercises', [
             'exercise_id' => $bucket->id,
             'variant_label' => 'seated and pancake compression lifts',
         ]);
+    }
+
+    public function test_log_workout_regression_logs_entire_original_session_despite_sloppy_payload(): void
+    {
+        $user = app(CurrentUserResolver::class)->user();
+        $legPress = Exercise::query()->where('name', 'Leg Press')->firstOrFail();
+        $calfPress = Exercise::query()->where('name', 'Calf Press on Leg Press')->firstOrFail();
+        $weightedPistol = Exercise::query()->where('name', 'Weighted Pistol Squat')->firstOrFail();
+
+        $logged = app(WorkoutLogger::class)->log($user, [
+            'name' => 'Leg day',
+            'kind' => 'strength',
+            'raw_input' => 'Leg press 40x80kg, 30x120kg, 24x160kg, 20x200kg, 10x230kg. Then 5 sets of 15 reps of calves at 230kg. Then 3 times 3 reps per leg of weighted pistol squats with 10kg. Finished with 15 minutes of handstand drills.',
+            'exercises' => [
+                [
+                    // Canonical-name echo instead of the user's wording: previously fatal.
+                    'exercise_id' => $legPress->id,
+                    'raw_phrase' => 'Leg Press',
+                    'resolution_type' => 'exact',
+                    'sets' => [
+                        ['reps' => 40, 'load_value' => 80, 'load_unit' => 'kg'],
+                        ['reps' => 30, 'load_value' => 120, 'load_unit' => 'kg'],
+                        ['reps' => 24, 'load_value' => 160, 'load_unit' => 'kg'],
+                        ['reps' => 20, 'load_value' => 200, 'load_unit' => 'kg'],
+                        ['reps' => 10, 'load_value' => 230, 'load_unit' => 'kg'],
+                    ],
+                ],
+                [
+                    // Bare phrase, no exercise_id, wrong resolution_type: previously fatal.
+                    'raw_phrase' => 'calves',
+                    'resolution_type' => 'bucket',
+                    'sets' => array_fill(0, 5, ['reps' => 15, 'load_value' => 230, 'load_unit' => 'kg']),
+                ],
+                [
+                    'raw_phrase' => 'weighted pistol squats',
+                    'sets' => array_fill(0, 6, ['reps' => 3, 'load_value' => 10, 'load_unit' => 'kg', 'side' => 'alternating']),
+                ],
+                [
+                    // Duration-only bucket entry without variant details: previously fatal.
+                    'raw_phrase' => 'handstand drills',
+                    'sets' => [['duration_seconds' => 900]],
+                ],
+            ],
+        ]);
+
+        $this->assertFalse($logged['refused']);
+        $this->assertSame(
+            ['Leg Press', 'Calf Press on Leg Press', 'Weighted Pistol Squat', 'Handstand Accessory Drill'],
+            collect($logged['saved_session']['exercises'])->pluck('name')->all(),
+        );
+        $this->assertSame(['exact', 'resolved', 'resolved', 'resolved'], array_column($logged['resolution_outcomes'], 'method'));
+        $this->assertSame([], $logged['auto_created_exercises']);
+        $this->assertSame([], $logged['assumed_matches']);
+        $this->assertSame(5, WorkoutSet::query()->where('reps', 15)->where('load_kg', 230)->count());
+        $this->assertDatabaseHas('workout_exercises', [
+            'name_snapshot' => 'Handstand Accessory Drill',
+            'variant_label' => 'handstand drills',
+        ]);
+        $this->assertDatabaseHas('exercise_phrase_memories', [
+            'user_id' => $user->id,
+            'exercise_id' => $calfPress->id,
+            'normalized_phrase' => ExerciseResolver::normalize('calves'),
+        ]);
+        $this->assertDatabaseHas('exercise_phrase_memories', [
+            'user_id' => $user->id,
+            'exercise_id' => $weightedPistol->id,
+            'normalized_phrase' => ExerciseResolver::normalize('weighted pistol squats'),
+        ]);
+    }
+
+    public function test_log_workout_auto_creates_unknown_exercise_as_flagged_last_resort(): void
+    {
+        $user = app(CurrentUserResolver::class)->user();
+
+        $logged = app(WorkoutLogger::class)->log($user, [
+            'raw_input' => 'turkish get ups 3x5 at 16kg',
+            'exercises' => [[
+                'raw_phrase' => 'turkish get ups',
+                'sets' => array_fill(0, 3, ['reps' => 5, 'load_value' => 16, 'load_unit' => 'kg']),
+            ]],
+        ]);
+
+        $this->assertFalse($logged['refused']);
+        $this->assertSame('auto_created', $logged['resolution_outcomes'][0]['method']);
+        $this->assertSame('Turkish Get Ups', $logged['auto_created_exercises'][0]['exercise']['name']);
+        $this->assertTrue($logged['auto_created_exercises'][0]['needs_review']);
+
+        $exercise = Exercise::query()->where('name', 'Turkish Get Ups')->firstOrFail();
+        $this->assertSame('chatgpt_auto', $exercise->source);
+        $this->assertSame((int) $user->id, (int) $exercise->user_id);
+        $this->assertSame('load_reps', $exercise->tracking_mode);
+        $this->assertTrue((bool) ($exercise->metadata['auto_created'] ?? false));
+        $this->assertTrue((bool) ($exercise->metadata['needs_review'] ?? false));
+        $this->assertDatabaseHas('exercise_aliases', [
+            'exercise_id' => $exercise->id,
+            'normalized_alias' => ExerciseResolver::normalize('turkish get ups'),
+        ]);
+        $this->assertDatabaseHas('exercise_phrase_memories', [
+            'user_id' => $user->id,
+            'exercise_id' => $exercise->id,
+            'normalized_phrase' => ExerciseResolver::normalize('turkish get ups'),
+        ]);
+
+        $resolution = app(ExerciseResolver::class)->resolveMentions($user, [
+            ['raw_phrase' => 'turkish get ups'],
+        ])[0];
+        $this->assertSame('Turkish Get Ups', $resolution['exercise']['name']);
+    }
+
+    public function test_log_workout_dedupes_repeated_unknown_phrase_within_request(): void
+    {
+        $user = app(CurrentUserResolver::class)->user();
+
+        $logged = app(WorkoutLogger::class)->log($user, [
+            'raw_input' => 'pogo hops 2x20 per side',
+            'exercises' => [
+                ['raw_phrase' => 'pogo hops', 'notes' => 'left side', 'sets' => [['reps' => 20]]],
+                ['raw_phrase' => 'pogo hops', 'notes' => 'right side', 'sets' => [['reps' => 20]]],
+            ],
+        ]);
+
+        $this->assertFalse($logged['refused']);
+        $this->assertSame(1, Exercise::query()->where('name', 'Pogo Hops')->count());
+        $this->assertCount(1, $logged['auto_created_exercises']);
+        $this->assertSame(['auto_created', 'phrase_memory'], array_column($logged['resolution_outcomes'], 'method'));
+        $this->assertSame(2, WorkoutExercise::query()->where('name_snapshot', 'Pogo Hops')->count());
+    }
+
+    public function test_remember_exercise_phrase_round_trip(): void
+    {
+        $user = app(CurrentUserResolver::class)->user();
+        $seated = Exercise::query()->where('name', 'Seated Calf Raise')->firstOrFail();
+
+        WorkoutMemoryServer::tool(RememberExercisePhraseTool::class, [
+            'phrase' => 'calves',
+            'exercise_id' => $seated->id,
+        ])->assertStructuredContent(fn (AssertableJson $json) => $json
+            ->where('ok', true)
+            ->where('phrase_memory.exercise_id', $seated->id)
+            ->where('exercise.name', 'Seated Calf Raise')
+            ->etc());
+
+        $this->assertDatabaseHas('exercise_phrase_memories', [
+            'user_id' => $user->id,
+            'exercise_id' => $seated->id,
+            'normalized_phrase' => ExerciseResolver::normalize('calves'),
+        ]);
+
+        $resolution = app(ExerciseResolver::class)->resolveMentions($user, [
+            ['raw_phrase' => 'calves'],
+        ])[0];
+
+        $this->assertSame('phrase_memory', $resolution['resolution']);
+        $this->assertSame('Seated Calf Raise', $resolution['exercise']['name']);
+    }
+
+    public function test_resolver_dedupes_candidates_and_returns_log_entry_template(): void
+    {
+        $user = app(CurrentUserResolver::class)->user();
+        $bucket = Exercise::query()->where('name', 'Handstand Accessory Drill')->firstOrFail();
+
+        $result = app(ExerciseResolver::class)->resolveMentions($user, [
+            ['raw_phrase' => 'handstand drills'],
+        ])[0];
+
+        $candidateIds = array_map(fn (array $candidate): int => (int) $candidate['exercise']['id'], $result['candidates']);
+        $this->assertSame($candidateIds, array_values(array_unique($candidateIds)));
+
+        $this->assertSame($result['resolution'], $result['resolution_type']);
+        $this->assertTrue($result['requires_variant_details']);
+        $this->assertSame([
+            'raw_phrase' => 'handstand drills',
+            'exercise_id' => $bucket->id,
+            'resolution_id' => $result['resolution_id'],
+            'variant_label' => null,
+        ], $result['log_entry_template']);
+
+        $attempt = ExerciseResolutionAttempt::query()->where('resolution_id', $result['resolution_id'])->firstOrFail();
+        $this->assertTrue($attempt->expires_at->greaterThan(now()->addHours(23)));
+    }
+
+    public function test_append_workout_exercise_resolves_bare_phrase_without_exercise_id(): void
+    {
+        $user = app(CurrentUserResolver::class)->user();
+        $manager = app(WorkoutSessionManager::class);
+
+        $manager->start($user, [
+            'name' => 'Live legs',
+            'raw_input' => 'Starting legs.',
+            'idempotency_key' => 'live-start-bare',
+        ]);
+
+        $payload = [
+            'raw_input' => 'Log leg press 3x10 at 100kg.',
+            'idempotency_key' => 'live-append-bare-leg-press',
+            'exercise' => [
+                'raw_phrase' => 'leg press',
+                'sets' => array_fill(0, 3, [
+                    'reps' => 10,
+                    'load_value' => 100,
+                    'load_unit' => 'kg',
+                    'load_type' => 'external',
+                ]),
+            ],
+        ];
+
+        $appended = $manager->appendExercise($user, $payload);
+        $replayed = $manager->appendExercise($user, $payload);
+
+        $this->assertFalse($appended['refused']);
+        $this->assertSame('Leg Press', $appended['resolution_outcomes'][0]['exercise_name']);
+        $this->assertTrue($replayed['idempotent_replay']);
+    }
+
+    public function test_update_workout_add_exercise_resolves_and_can_auto_create(): void
+    {
+        $user = app(CurrentUserResolver::class)->user();
+        $ringDip = Exercise::query()->where('name', 'Ring Dip')->firstOrFail();
+        $logged = app(WorkoutLogger::class)->log($user, [
+            'raw_input' => 'ring dips 1x8',
+            'exercises' => [[
+                'exercise_id' => $ringDip->id,
+                'sets' => [['reps' => 8]],
+            ]],
+        ]);
+
+        $updated = app(WorkoutUpdater::class)->update($user, [
+            'workout_id' => $logged['saved_session']['id'],
+            'operations' => [
+                [
+                    'type' => 'add_exercise',
+                    'raw_phrase' => 'leg press',
+                    'sets' => [['reps' => 10, 'load_value' => 100, 'load_unit' => 'kg']],
+                ],
+                [
+                    'type' => 'add_exercise',
+                    'raw_phrase' => 'turkish get up',
+                    'sets' => [['reps' => 5, 'load_value' => 16, 'load_unit' => 'kg']],
+                ],
+            ],
+        ]);
+
+        $this->assertFalse($updated['refused']);
+        $this->assertSame(['resolved', 'auto_created'], array_column($updated['resolution_outcomes'], 'method'));
+        $this->assertSame('Turkish Get Up', $updated['auto_created_exercises'][0]['exercise']['name']);
+        $this->assertSame(
+            ['Ring Dip', 'Leg Press', 'Turkish Get Up'],
+            collect($updated['updated_workout']['exercises'])->pluck('name')->all(),
+        );
     }
 
     public function test_recent_workouts_exercise_history_and_training_summary_are_returned(): void
@@ -517,6 +825,15 @@ class WorkoutMemoryMcpTest extends TestCase
         ])->assertStructuredContent(fn (AssertableJson $json) => $json
             ->where('ok', true)
             ->where('results.0.exercise.name', 'Weighted Ring Muscle-Up')
+            ->has('results.0.log_entry_template')
+            ->etc());
+
+        WorkoutMemoryServer::tool(RememberExercisePhraseTool::class, [
+            'phrase' => 'rings MU work',
+            'exercise_id' => Exercise::query()->where('name', 'Ring Muscle-Up')->firstOrFail()->id,
+        ])->assertStructuredContent(fn (AssertableJson $json) => $json
+            ->where('ok', true)
+            ->has('phrase_memory')
             ->etc());
     }
 

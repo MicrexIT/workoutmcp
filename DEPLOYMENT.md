@@ -454,7 +454,7 @@ On push to `main`, the workflow:
 6. Runs `php artisan test --compact`.
 7. Starts an SSH agent with `HETZNER_SSH_KEY`.
 8. Syncs the repo to Hetzner with `rsync`.
-9. Runs server-side Composer install, migrations, cache rebuild, queue restart, and PHP-FPM reload.
+9. Runs server-side Composer install, migrations, the idempotent exercise-catalog seeder (`db:seed --force`, safe to re-run: it only upserts seed catalog rows), cache rebuild, queue restart, and PHP-FPM reload.
 10. Verifies `https://workoutmcp.com/up` and OAuth metadata.
 
 ### Required GitHub Secrets
@@ -549,6 +549,7 @@ ssh -i /Users/micrex/.ssh/workoutmcp_github_actions_deploy \
   deploy@167.233.74.248 'cd /srv/apps/workout-memory-mcp \
     && composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader \
     && php artisan migrate --force \
+    && php artisan db:seed --force \
     && chmod -R ug+rwX storage bootstrap/cache \
     && chmod ug+rwX database database/database.sqlite \
     && find storage bootstrap/cache database -type d -exec chmod 2775 {} + \

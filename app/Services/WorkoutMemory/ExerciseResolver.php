@@ -78,6 +78,22 @@ class ExerciseResolver
         ];
     }
 
+    /**
+     * Resolve one raw phrase on behalf of a logging tool, persisting discovery evidence.
+     *
+     * @return array<string, mixed>
+     */
+    public function resolveForLogging(User $user, string $rawPhrase, ?string $context = null, ?string $workoutKind = null): array
+    {
+        return $this->resolveOne(
+            user: $user,
+            rawPhrase: $rawPhrase,
+            context: $context,
+            workoutKind: $workoutKind,
+            allowBucketSuggestions: true,
+        );
+    }
+
     public static function normalize(string $value): string
     {
         $normalized = Str::of($value)
@@ -152,11 +168,16 @@ class ExerciseResolver
             $suggestedAction = 'ask_user';
         }
 
-        $topCandidates = $candidates->take(8)->values()->all();
+        $topCandidates = $candidates->take(8);
 
         if ($bucketCandidate !== null) {
-            $topCandidates[] = $bucketCandidate;
+            $topCandidates = $topCandidates
+                ->push($bucketCandidate)
+                ->sortByDesc('confidence')
+                ->unique(fn (array $candidate): int => (int) $candidate['exercise']['id']);
         }
+
+        $topCandidates = $topCandidates->values()->all();
 
         $usesPhraseMemory = ($best['resolution'] ?? null) === 'phrase_memory';
 
@@ -170,12 +191,18 @@ class ExerciseResolver
             suggestedAction: $suggestedAction,
         );
 
+        $chosenExercise = $resolution === 'bucket_suggestion'
+            ? ($bucketCandidate['exercise'] ?? null)
+            : (($best !== null && $best['confidence'] >= 0.80) ? $best['exercise'] : null);
+        $variantLabel = $usesPhraseMemory ? $memory?->variant_label : null;
+
         return [
             'resolution_id' => $attempt->resolution_id,
             'raw_phrase' => $rawPhrase,
             'resolution' => $resolution,
+            'resolution_type' => $resolution,
             'exercise' => ($best !== null && $best['confidence'] >= 0.80) ? $best['exercise'] : null,
-            'variant_label' => $usesPhraseMemory ? $memory?->variant_label : null,
+            'variant_label' => $variantLabel,
             'variant_description' => $usesPhraseMemory ? $memory?->variant_description : null,
             'confidence' => $resolution === 'bucket_suggestion' ? $bucketCandidate['confidence'] : (float) ($best['confidence'] ?? 0),
             'duplicate_risk' => $this->duplicateRisk($best),
@@ -183,6 +210,13 @@ class ExerciseResolver
             'should_ask_user' => $suggestedAction === 'ask_user',
             'suggested_action' => $suggestedAction,
             'recommended_bucket_exercise' => $bucketCandidate['exercise'] ?? null,
+            'requires_variant_details' => ($chosenExercise['granularity'] ?? null) === 'bucket',
+            'log_entry_template' => [
+                'raw_phrase' => $rawPhrase,
+                'exercise_id' => $chosenExercise['id'] ?? null,
+                'resolution_id' => $attempt->resolution_id,
+                'variant_label' => $variantLabel,
+            ],
             'candidates' => $topCandidates,
         ];
     }
@@ -399,7 +433,7 @@ class ExerciseResolver
             'duplicate_risk' => $this->duplicateRisk($best),
             'candidates' => $candidates,
             'suggested_action' => $suggestedAction,
-            'expires_at' => now()->addMinutes(30),
+            'expires_at' => now()->addDay(),
         ]);
     }
 

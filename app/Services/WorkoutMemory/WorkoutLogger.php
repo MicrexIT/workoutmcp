@@ -39,7 +39,7 @@ class WorkoutLogger
         if ($validation !== []) {
             return [
                 'refused' => true,
-                'refusal_reason' => 'Workout contains unknown, ambiguous, or invalid exercise references. log_workout never creates exercises implicitly.',
+                'refusal_reason' => 'Workout entries are structurally invalid: each entry needs a raw_phrase or a known exercise_id.',
                 'unresolved_or_ambiguous_items' => $validation,
                 'saved_session' => null,
                 'normalized_summary' => null,
@@ -47,8 +47,10 @@ class WorkoutLogger
         }
 
         $possibleDuplicate = $this->possibleDuplicate($user, $input);
+        $outcomes = [];
 
-        $session = DB::transaction(function () use ($user, $input): WorkoutSession {
+        $session = DB::transaction(function () use ($user, $input, &$outcomes): WorkoutSession {
+            $outcomes = [];
             $startedAt = $this->occurredAt($input);
             $session = WorkoutSession::query()->create([
                 'user_id' => $user->id,
@@ -71,7 +73,7 @@ class WorkoutLogger
             ]);
 
             foreach (array_values($input['exercises'] ?? []) as $index => $exerciseInput) {
-                $this->exerciseWriter->createWorkoutExercise($user, $session, $exerciseInput, $index + 1);
+                $outcomes[] = $this->exerciseWriter->createWorkoutExercise($user, $session, $exerciseInput, $index + 1)['outcome'];
             }
 
             $session->changeEvents()->create([
@@ -91,6 +93,7 @@ class WorkoutLogger
             'idempotent_replay' => false,
             'possible_duplicate' => $possibleDuplicate,
             'unresolved_or_ambiguous_items' => [],
+            ...$this->exerciseWriter->outcomeSummary($outcomes),
             'saved_session' => $this->summaries->workout($session),
             'normalized_summary' => $this->normalizedSummary($session),
         ];

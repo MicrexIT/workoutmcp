@@ -14,7 +14,7 @@ use Laravel\Mcp\Server\Tool;
 use Laravel\Mcp\Server\Tools\Annotations\IsIdempotent;
 
 #[Name('append_workout_exercise')]
-#[Description('Append one finished exercise block with sets to an active session or a recent completed "last session". Use after resolve_exercise_mentions and pass resolution_id unless the raw phrase directly matches. Never creates exercises implicitly. Defaults to target_session=active_or_new for live workout phrases like "log leg press now". Use target_session=latest_completed when the user says "add this to the last session" or the session was just logged/completed. Use log_workout for a separate completed workout from earlier. Provide a stable per-exercise idempotency_key such as "<message_id>:append:leg-press".')]
+#[Description('Append one finished exercise block with sets to an active session or a recent completed "last session". Always send the exercise raw_phrase; exercise_id and resolution_id are optional hints. The server resolves phrases itself and never drops the entry — as a last resort it creates a clearly-flagged exercise reported in auto_created_exercises. Defaults to target_session=active_or_new for live workout phrases like "log leg press now". Use target_session=latest_completed when the user says "add this to the last session" or the session was just logged/completed. Use log_workout for a separate completed workout from earlier. Provide a stable per-exercise idempotency_key such as "<message_id>:append:leg-press".')]
 #[IsIdempotent]
 class AppendWorkoutExerciseTool extends Tool
 {
@@ -37,11 +37,11 @@ class AppendWorkoutExerciseTool extends Tool
             'user_confirmed_stale_active_session' => ['sometimes', 'boolean'],
             'user_confirmed_current_session' => ['sometimes', 'boolean'],
             'exercise' => ['required', 'array'],
-            'exercise.exercise_id' => ['required', 'integer'],
+            'exercise.exercise_id' => ['sometimes', 'nullable', 'integer'],
             'exercise.resolution_id' => ['sometimes', 'nullable', 'string'],
-            'exercise.raw_phrase' => ['sometimes', 'nullable', 'string'],
-            'exercise.resolution_type' => ['required', 'string'],
-            'exercise.variant_label' => ['sometimes', 'nullable', 'string'],
+            'exercise.raw_phrase' => ['nullable', 'string', 'max:255', 'required_without:exercise.exercise_id'],
+            'exercise.resolution_type' => ['sometimes', 'nullable', 'string'],
+            'exercise.variant_label' => ['sometimes', 'nullable', 'string', 'max:255'],
             'exercise.variant_description' => ['sometimes', 'nullable', 'string'],
             'exercise.prescription' => ['sometimes', 'nullable', 'string'],
             'exercise.notes' => ['sometimes', 'nullable', 'string'],
@@ -85,10 +85,10 @@ class AppendWorkoutExerciseTool extends Tool
             'user_confirmed_stale_active_session' => $schema->boolean()->default(false),
             'user_confirmed_current_session' => $schema->boolean()->default(false),
             'exercise' => $schema->object([
-                'exercise_id' => $schema->integer()->required(),
-                'resolution_id' => $schema->string()->nullable(),
-                'raw_phrase' => $schema->string()->nullable(),
-                'resolution_type' => $schema->string()->required(),
+                'raw_phrase' => $schema->string()->description('The user\'s wording for the exercise. Always send it; required when exercise_id is omitted.'),
+                'exercise_id' => $schema->integer()->nullable()->description('Optional hint. The server resolves raw_phrase when omitted.'),
+                'resolution_id' => $schema->string()->nullable()->description('Optional evidence id from resolve_exercise_mentions or search_exercises.'),
+                'resolution_type' => $schema->string()->nullable()->description('Ignored; the server derives it. Kept for backward compatibility.'),
                 'variant_label' => $schema->string()->nullable(),
                 'variant_description' => $schema->string()->nullable(),
                 'prescription' => $schema->string()->nullable(),

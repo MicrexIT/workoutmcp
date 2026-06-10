@@ -73,6 +73,7 @@ jobs:
 
             composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
             php artisan migrate --force
+            php artisan db:seed --force
 
             chmod -R ug+rwX storage bootstrap/cache
             chmod ug+rwX database database/database.sqlite
