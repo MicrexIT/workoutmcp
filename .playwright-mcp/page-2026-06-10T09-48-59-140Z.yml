@@ -1,0 +1,13 @@
+- main [ref=e2]:
+  - generic [ref=e3]:
+    - heading "Sign in" [level=1] [ref=e4]
+    - paragraph [ref=e5]: Use your Workout Memory account to manage the MCP server.
+    - generic [ref=e6]:
+      - generic [ref=e7]: Email
+      - textbox "Email" [active] [ref=e8]
+      - generic [ref=e9]: Password
+      - textbox "Password" [ref=e10]
+      - generic [ref=e11]:
+        - checkbox "Remember me" [ref=e12]
+        - generic [ref=e13]: Remember me
+      - button "Sign in" [ref=e14] [cursor=pointer]

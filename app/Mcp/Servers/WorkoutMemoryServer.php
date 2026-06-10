@@ -1,0 +1,59 @@
+<?php
+
+namespace App\Mcp\Servers;
+
+use App\Mcp\Tools\CreateExerciseTool;
+use App\Mcp\Tools\DeleteWorkoutTool;
+use App\Mcp\Tools\AppendSessionStoryTool;
+use App\Mcp\Tools\AppendWorkoutExerciseTool;
+use App\Mcp\Tools\FinishWorkoutSessionTool;
+use App\Mcp\Tools\GetExerciseHistoryTool;
+use App\Mcp\Tools\GetCurrentWorkoutSessionTool;
+use App\Mcp\Tools\GetTrainingSummaryTool;
+use App\Mcp\Tools\GetUserContextTool;
+use App\Mcp\Tools\GetWorkoutTool;
+use App\Mcp\Tools\ListRecentWorkoutsTool;
+use App\Mcp\Tools\LogWorkoutTool;
+use App\Mcp\Tools\ResolveExerciseMentionsTool;
+use App\Mcp\Tools\SearchExercisesTool;
+use App\Mcp\Tools\StartWorkoutSessionTool;
+use App\Mcp\Tools\UpdateUserContextTool;
+use App\Mcp\Tools\UpdateWorkoutTool;
+use Laravel\Mcp\Server;
+use Laravel\Mcp\Server\Attributes\Instructions;
+use Laravel\Mcp\Server\Attributes\Name;
+use Laravel\Mcp\Server\Attributes\Version;
+
+#[Name('Workout Memory Server')]
+#[Version('0.0.1')]
+#[Instructions('Workout Memory MCP is a ChatGPT-first workout tracker. Always resolve exercise mentions before logging workouts. Use existing exercises and buckets whenever possible. create_exercise requires discovery evidence and refuses likely duplicates. log_workout and append_workout_exercise never create exercises implicitly. Use start_workout_session, append_session_story, append_workout_exercise, and finish_workout_session for a live in-progress workout the user is doing now. If the user says to add something to the last/just-created session, use get_current_workout_session when needed and append_workout_exercise with target_session=latest_completed when that session is clearly recent. Use log_workout for a separate completed workout from earlier, such as yesterday or a fully described past session. Provide unique per-action idempotency_key values for new mutating session tools; do not reuse one key for multiple appends in the same user message. For planning, call get_user_context and get_training_summary, then propose workouts conversationally without saving a plan unless the user asks later to log a completed workout.')]
+class WorkoutMemoryServer extends Server
+{
+    protected array $tools = [
+        GetUserContextTool::class,
+        UpdateUserContextTool::class,
+        GetCurrentWorkoutSessionTool::class,
+        StartWorkoutSessionTool::class,
+        AppendSessionStoryTool::class,
+        AppendWorkoutExerciseTool::class,
+        FinishWorkoutSessionTool::class,
+        ResolveExerciseMentionsTool::class,
+        SearchExercisesTool::class,
+        CreateExerciseTool::class,
+        LogWorkoutTool::class,
+        ListRecentWorkoutsTool::class,
+        GetWorkoutTool::class,
+        GetExerciseHistoryTool::class,
+        GetTrainingSummaryTool::class,
+        UpdateWorkoutTool::class,
+        DeleteWorkoutTool::class,
+    ];
+
+    protected array $resources = [
+        //
+    ];
+
+    protected array $prompts = [
+        //
+    ];
+}
