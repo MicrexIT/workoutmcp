@@ -1,0 +1,95 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Test, build, and deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: mbstring, dom, fileinfo, pdo_sqlite, sqlite3
+          coverage: none
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --prefer-dist --optimize-autoloader
+
+      - name: Prepare application
+        run: |
+          cp .env.example .env
+          php artisan key:generate --ansi
+
+      - name: Install Node dependencies
+        run: npm ci
+
+      - name: Build frontend assets
+        run: npm run build
+
+      - name: Run tests
+        run: php artisan test --compact
+
+      - name: Start SSH agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.HETZNER_SSH_KEY }}
+
+      - name: Trust Hetzner host key
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H "${{ secrets.HETZNER_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Sync files to Hetzner
+        run: |
+          rsync -az --delete \
+            --exclude-from=.deployignore \
+            ./ "${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }}:${{ secrets.HETZNER_PATH }}/"
+
+      - name: Run remote deploy commands
+        run: |
+          ssh "${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }}" <<'REMOTE'
+            set -euo pipefail
+            cd "${{ secrets.HETZNER_PATH }}"
+
+            composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+            php artisan migrate --force
+
+            chmod -R ug+rwX storage bootstrap/cache
+            chmod ug+rwX database database/database.sqlite
+            find storage bootstrap/cache database -type d -exec chmod 2775 {} +
+
+            php artisan config:clear
+            php artisan event:clear
+            php artisan route:clear
+            php artisan view:clear
+            php artisan optimize
+            php artisan queue:restart
+
+            sudo -n systemctl restart workout-memory-queue.service
+            sudo -n systemctl reload php8.5-fpm
+          REMOTE
+
+      - name: Verify deployment
+        run: |
+          curl --fail --silent --show-error --head "https://workoutmcp.com/up"
+          curl --fail --silent --show-error "https://workoutmcp.com/.well-known/oauth-authorization-server" >/dev/null
