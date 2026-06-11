@@ -245,6 +245,8 @@ find "${APP_PATH}" -type d -exec chmod 2775 {} +
 
 The setgid bit on directories is important. It keeps new runtime files in the `www-data` group so both the deploy user and PHP-FPM can write what they need.
 
+Ownership matters as much as mode: only a file's owner may `chmod` it or set its timestamps, so everything rsync manages must stay owned by `${DEPLOY_USER}`. Files PHP-FPM and the queue worker create at runtime (logs, compiled views, cache) are owned by `www-data` — that is expected, and the deploy workflow skips them on purpose (`rsync --omit-dir-times`, ownership-scoped `find -user` permission pass). Never "fix permissions" with `chown -R www-data:www-data` on the app tree and never run `artisan`/`composer` on the server as root or `www-data`; use the deploy user. Both June 11, 2026 deploy outages came from exactly that kind of drift.
+
 ### 5. Allow Limited Sudo For Deploys
 
 The GitHub workflow needs to restart the Laravel queue worker and reload PHP-FPM. It should not need full root access.
@@ -608,6 +610,32 @@ ssh: connect to host 167.233.74.248 port 22: Operation not permitted
 ```
 
 The local environment is blocking outbound SSH before authentication. Run the deploy from a terminal that allows SSH, or use GitHub Actions.
+
+### Deploy fails at rsync or the permission pass (ownership drift)
+
+Failure signatures in the GitHub Actions log:
+
+```text
+rsync: [generator] failed to set times on ".../database": Operation not permitted (1)
+rsync error: some files/attrs were not transferred ... (code 23)
+```
+
+```text
+chmod: cannot access 'bootstrap/cache/...': Permission denied
+```
+
+Cause: paths under the app tree stopped being owned by the `deploy` user (usually after someone ran `chown -R www-data:www-data` or ran `artisan`/`composer` on the server as root or `www-data`). Only the owner of a path can set its times or mode, so the deploy aborts before migrations, caches, and service restarts — production keeps running the old finalized state while pushes silently stop landing.
+
+The workflow tolerates `www-data`-owned *runtime* files by design (`rsync --omit-dir-times`, `find -user "$(id -un)"` permission pass), so this only happens when ownership of tracked/synced paths drifts. Recovery, on the server as root:
+
+```shell
+chown -R deploy:www-data /srv/apps/workout-memory-mcp/database \
+  /srv/apps/workout-memory-mcp/storage /srv/apps/workout-memory-mcp/bootstrap/cache
+find /srv/apps/workout-memory-mcp/database /srv/apps/workout-memory-mcp/storage \
+  /srv/apps/workout-memory-mcp/bootstrap/cache -type d -exec chmod 2775 {} +
+```
+
+Then re-run the failed workflow (`gh run rerun <run-id>`) or push again. Prevention: do server maintenance as the `deploy` user, never chown the tree to `www-data`.
 
 ### Production crashes with missing dev package classes
 
