@@ -61,7 +61,7 @@ jobs:
 
       - name: Sync files to Hetzner
         run: |
-          rsync -az --delete \
+          rsync -az --omit-dir-times --delete \
             --exclude-from=.deployignore \
             ./ "${{ secrets.HETZNER_USER }}@${{ secrets.HETZNER_HOST }}:${{ secrets.HETZNER_PATH }}/"
 
@@ -75,9 +75,12 @@ jobs:
             php artisan migrate --force
             php artisan db:seed --force
 
-            chmod -R ug+rwX storage bootstrap/cache
-            chmod ug+rwX database database/database.sqlite
-            find storage bootstrap/cache database -type d -exec chmod 2775 {} +
+            # Runtime files created by www-data are not chmod-able by the deploy
+            # user; setgid directories already give them the right group. Only
+            # normalize what deploy owns, then probe real database writability.
+            find storage bootstrap/cache database -user "$(id -un)" -exec chmod ug+rwX {} +
+            find storage bootstrap/cache database -type d -user "$(id -un)" -exec chmod 2775 {} +
+            sqlite3 database/database.sqlite "insert or replace into cache (key, value, expiration) values ('deploy_permission_probe', 's:2:\"ok\";', strftime('%s', 'now') + 60); delete from cache where key = 'deploy_permission_probe';"
 
             php artisan config:clear
             php artisan event:clear
@@ -93,4 +96,5 @@ jobs:
       - name: Verify deployment
         run: |
           curl --fail --silent --show-error --head "https://workoutmcp.com/up"
+          curl --fail --silent --show-error --head "https://workoutmcp.com/login"
           curl --fail --silent --show-error "https://workoutmcp.com/.well-known/oauth-authorization-server" >/dev/null
