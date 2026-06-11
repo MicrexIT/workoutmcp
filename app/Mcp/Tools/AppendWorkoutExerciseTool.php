@@ -14,7 +14,7 @@ use Laravel\Mcp\Server\Tool;
 use Laravel\Mcp\Server\Tools\Annotations\IsIdempotent;
 
 #[Name('append_workout_exercise')]
-#[Description('Append one finished exercise block with sets to an active session or a recent completed "last session". Always send the exercise raw_phrase; exercise_id and resolution_id are optional hints. The server resolves phrases itself and never drops the entry — as a last resort it creates a clearly-flagged exercise reported in auto_created_exercises. Defaults to target_session=active_or_new for live workout phrases like "log leg press now". Use target_session=latest_completed when the user says "add this to the last session" or the session was just logged/completed. Use log_workout for a separate completed workout from earlier. Provide a stable per-exercise idempotency_key such as "<message_id>:append:leg-press".')]
+#[Description('Append one finished exercise block with sets to an active session or a recent completed "last session". Always send the exercise raw_phrase; exercise_id and resolution_id are optional hints — never invent ids or use position numbers; omit exercise_id when unsure. The server resolves phrases itself and never drops the entry — as a last resort it creates a clearly-flagged exercise reported in auto_created_exercises. Hints contradicting the raw_phrase are ignored and reported in ignored_exercise_hints. Defaults to target_session=active_or_new for live workout phrases like "log leg press now". Use target_session=latest_completed when the user says "add this to the last session" or the session was just logged/completed. Use log_workout for a separate completed workout from earlier. Provide a stable per-exercise idempotency_key such as "<message_id>:append:leg-press".')]
 #[IsIdempotent]
 class AppendWorkoutExerciseTool extends Tool
 {
@@ -86,7 +86,7 @@ class AppendWorkoutExerciseTool extends Tool
             'user_confirmed_current_session' => $schema->boolean()->default(false),
             'exercise' => $schema->object([
                 'raw_phrase' => $schema->string()->description('The user\'s wording for the exercise. Always send it so the server can resolve or correct catalog matches.')->required(),
-                'exercise_id' => $schema->integer()->nullable()->description('Optional hint. The server resolves raw_phrase when omitted.'),
+                'exercise_id' => $schema->integer()->nullable()->description('Optional hint: a real catalog id previously returned by this server (search_exercises, resolve_exercise_mentions, or workout history). Never an invented number or a position index. Omit when unsure — the server resolves raw_phrase itself, and ids that contradict the raw_phrase are ignored.'),
                 'resolution_id' => $schema->string()->nullable()->description('Optional evidence id from resolve_exercise_mentions or search_exercises.'),
                 'resolution_type' => $schema->string()->nullable()->description('Ignored; the server derives it. Kept for backward compatibility.'),
                 'variant_label' => $schema->string()->nullable(),

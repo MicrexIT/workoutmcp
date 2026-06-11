@@ -209,12 +209,28 @@ class WorkoutExerciseWriter
                 ])
                 ->values()
                 ->all(),
+            'ignored_exercise_hints' => collect($outcomes)
+                ->filter(fn (array $outcome): bool => isset($outcome['ignored_exercise_hint']))
+                ->map(fn (array $outcome): array => [
+                    'raw_phrase' => $outcome['raw_phrase'],
+                    'ignored_exercise_id' => $outcome['ignored_exercise_hint']['exercise_id'],
+                    'ignored_exercise_name' => $outcome['ignored_exercise_hint']['exercise_name'],
+                    'used_exercise_id' => $outcome['exercise_id'],
+                    'used_exercise_name' => $outcome['exercise_name'],
+                    'reason' => 'The provided exercise_id did not match the raw_phrase evidence, so the server kept its own resolution. If the id was intentional, correct the entry with update_workout and teach the wording with remember_exercise_phrase.',
+                ])
+                ->values()
+                ->all(),
         ];
     }
 
     /**
      * Server-authoritative resolution ladder: resolver evidence, then the explicitly
      * provided exercise, then phrase resolution escalating to flagged auto-creation.
+     *
+     * Client hints are only trusted when the entry's own raw_phrase corroborates them:
+     * models have echoed entry positions as exercise_ids and paired resolution_ids with
+     * the wrong entries, so uncorroborated hints lose to confident phrase evidence.
      *
      * @param  array<string, mixed>  $exerciseInput
      * @return array<string, mixed>
@@ -224,6 +240,10 @@ class WorkoutExerciseWriter
         $rawPhrase = trim((string) ($exerciseInput['raw_phrase'] ?? ''));
         $attempt = $this->resolutionAttempt($user, $exerciseInput['resolution_id'] ?? null);
         $providedExercise = $this->visibleExercises($user)->find($exerciseInput['exercise_id'] ?? null);
+
+        if ($attempt !== null && $rawPhrase !== '' && (string) $attempt->normalized_phrase !== ExerciseResolver::normalize($rawPhrase)) {
+            $attempt = null;
+        }
 
         if ($attempt !== null) {
             $resolved = $this->resolveFromAttempt($user, $attempt, $providedExercise, $rawPhrase);
@@ -256,7 +276,24 @@ class WorkoutExerciseWriter
                 return null;
             }
 
-            return $this->attemptOutcome($attempt, $providedExercise, $match, $rawPhrase, 'evidence', []);
+            $matchConfidence = (float) ($match['confidence'] ?? 0);
+
+            if ($matchConfidence >= 0.80 || (int) $providedExercise->id === (int) $attempt->best_exercise_id) {
+                return $this->attemptOutcome($attempt, $providedExercise, $match, $rawPhrase, 'evidence', []);
+            }
+
+            if ($matchConfidence >= 0.60) {
+                return $this->attemptOutcome(
+                    $attempt,
+                    $providedExercise,
+                    $match,
+                    $rawPhrase,
+                    'assumed',
+                    $this->alternativesFromCandidates($candidates->all(), (int) $providedExercise->id),
+                );
+            }
+
+            return null;
         }
 
         $best = $attempt->best_exercise_id !== null
@@ -317,7 +354,10 @@ class WorkoutExerciseWriter
     }
 
     /**
-     * An explicitly provided exercise id always wins; derive how it relates to the phrase.
+     * A provided exercise id wins only while the phrase corroborates it. Models have
+     * sent entry positions and stale ids as exercise_id, so when the phrase clearly
+     * resolves elsewhere the server keeps its own resolution and reports the ignored
+     * hint; without a confident server alternative the explicit id is kept, flagged.
      *
      * @return array<string, mixed>
      */
@@ -365,16 +405,31 @@ class WorkoutExerciseWriter
         $candidate = collect($resolution['candidates'] ?? [])->first(
             fn (array $item): bool => (int) ($item['exercise']['id'] ?? 0) === (int) $exercise->id,
         );
+        $providedConfidence = (float) ($candidate['confidence'] ?? 0);
 
-        if ($candidate !== null && (float) ($candidate['confidence'] ?? 0) >= 0.80) {
+        if ($candidate !== null && $providedConfidence >= 0.80) {
             $resolutionType = (string) $candidate['resolution'];
 
             return [
                 ...$base,
                 'resolution_type' => $resolutionType === 'bucket_suggestion' ? 'bucket' : $resolutionType,
                 'method' => 'resolved',
-                'confidence' => (float) $candidate['confidence'],
+                'confidence' => $providedConfidence,
             ];
+        }
+
+        if ($providedConfidence < 0.60) {
+            $serverResolved = $this->confidentPhraseOutcome($user, $resolution, $base);
+
+            if ($serverResolved !== null) {
+                return [
+                    ...$serverResolved,
+                    'ignored_exercise_hint' => [
+                        'exercise_id' => (int) $exercise->id,
+                        'exercise_name' => $exercise->name,
+                    ],
+                ];
+            }
         }
 
         return [
@@ -393,7 +448,6 @@ class WorkoutExerciseWriter
     private function resolvePhrase(User $user, string $rawPhrase, array $exerciseInput): array
     {
         $resolution = $this->resolver->resolveForLogging($user, $rawPhrase);
-        $resolutionType = (string) ($resolution['resolution'] ?? 'create_suggestion');
 
         $base = [
             'attempt' => $this->resolutionAttempt($user, $resolution['resolution_id'] ?? null),
@@ -403,6 +457,22 @@ class WorkoutExerciseWriter
             'variant_description' => null,
             'auto_created' => false,
         ];
+
+        return $this->confidentPhraseOutcome($user, $resolution, $base)
+            ?? $this->autoCreate($user, $rawPhrase, $exerciseInput, $base);
+    }
+
+    /**
+     * Confident server-side outcome for a phrase resolution: a strong existing match,
+     * a bucket fallback, or a flagged best guess. Null when only auto-creation remains.
+     *
+     * @param  array<string, mixed>  $resolution
+     * @param  array<string, mixed>  $base
+     * @return array<string, mixed>|null
+     */
+    private function confidentPhraseOutcome(User $user, array $resolution, array $base): ?array
+    {
+        $resolutionType = (string) ($resolution['resolution'] ?? 'create_suggestion');
 
         $bestSummary = $resolution['exercise'] ?? null;
 
@@ -458,7 +528,7 @@ class WorkoutExerciseWriter
             }
         }
 
-        return $this->autoCreate($user, $rawPhrase, $exerciseInput, $base);
+        return null;
     }
 
     /**
@@ -591,6 +661,10 @@ class WorkoutExerciseWriter
             'variant_label_autofilled' => $variantLabelAutofilled,
             'alternatives' => $resolved['alternatives'],
         ];
+
+        if (isset($resolved['ignored_exercise_hint'])) {
+            $outcome['ignored_exercise_hint'] = $resolved['ignored_exercise_hint'];
+        }
 
         if ($resolved['auto_created']) {
             $outcome['exercise_summary'] = $this->serializer->summary($exercise->fresh(['aliases', 'parent']));
