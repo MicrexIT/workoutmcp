@@ -85,7 +85,7 @@ class AppendWorkoutExerciseTool extends Tool
             'user_confirmed_stale_active_session' => $schema->boolean()->default(false),
             'user_confirmed_current_session' => $schema->boolean()->default(false),
             'exercise' => $schema->object([
-                'raw_phrase' => $schema->string()->description('The user\'s wording for the exercise. Always send it; required when exercise_id is omitted.'),
+                'raw_phrase' => $schema->string()->description('The user\'s wording for the exercise. Always send it so the server can resolve or correct catalog matches.')->required(),
                 'exercise_id' => $schema->integer()->nullable()->description('Optional hint. The server resolves raw_phrase when omitted.'),
                 'resolution_id' => $schema->string()->nullable()->description('Optional evidence id from resolve_exercise_mentions or search_exercises.'),
                 'resolution_type' => $schema->string()->nullable()->description('Ignored; the server derives it. Kept for backward compatibility.'),

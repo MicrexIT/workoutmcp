@@ -3,8 +3,11 @@
 namespace Tests\Feature\Auth;
 
 use App\Models\User;
+use App\Providers\AppServiceProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\URL;
 use Tests\TestCase;
 
 class AuthenticationTest extends TestCase
@@ -99,6 +102,45 @@ class AuthenticationTest extends TestCase
         $this->assertGuest();
     }
 
+    public function test_configured_public_oauth_url_does_not_override_local_login_action(): void
+    {
+        User::factory()->create();
+
+        config()->set('workout_memory.oauth.public_url', 'https://public-workout.example');
+
+        $this->bootUrlProviderFor('http://127.0.0.1:8000/login');
+
+        $this->get('http://127.0.0.1:8000/login')
+            ->assertOk()
+            ->assertSee('action="http://127.0.0.1:8000/login"', false)
+            ->assertDontSee('public-workout.example', false);
+    }
+
+    public function test_configured_public_oauth_url_does_not_override_logged_in_dashboard_links(): void
+    {
+        $this->actingAs(User::factory()->create());
+
+        config()->set('workout_memory.oauth.public_url', 'https://public-workout.example');
+
+        $this->bootUrlProviderFor('http://127.0.0.1:8000/');
+
+        $this->get('http://127.0.0.1:8000/')
+            ->assertOk()
+            ->assertSee('href="http://127.0.0.1:8000/exercises"', false)
+            ->assertSee('href="http://127.0.0.1:8000/workouts"', false)
+            ->assertSee('action="http://127.0.0.1:8000/logout"', false)
+            ->assertDontSee('public-workout.example', false);
+    }
+
+    public function test_configured_public_oauth_url_is_used_for_matching_public_host_requests(): void
+    {
+        config()->set('workout_memory.oauth.public_url', 'https://public-workout.example');
+
+        $this->bootUrlProviderFor('http://public-workout.example/oauth/authorize');
+
+        $this->assertSame('https://public-workout.example/login', route('login'));
+    }
+
     public function test_dashboard_routes_require_authentication(): void
     {
         User::factory()->create();
@@ -106,5 +148,18 @@ class AuthenticationTest extends TestCase
         $this->get('/')->assertRedirect(route('login'));
         $this->get('/exercises')->assertRedirect(route('login'));
         $this->get('/workouts')->assertRedirect(route('login'));
+    }
+
+    private function bootUrlProviderFor(string $url): void
+    {
+        $request = Request::create($url);
+
+        $this->app->instance('request', $request);
+
+        URL::setRequest($request);
+        URL::useOrigin(null);
+        URL::forceScheme(null);
+
+        (new AppServiceProvider($this->app))->boot();
     }
 }

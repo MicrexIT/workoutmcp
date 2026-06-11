@@ -11,11 +11,9 @@ use Laravel\Mcp\ResponseFactory;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Attributes\Name;
 use Laravel\Mcp\Server\Tool;
-use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 
 #[Name('resolve_exercise_mentions')]
-#[Description('Resolve raw exercise phrases before logging. This writes short-lived discovery evidence but does not create exercises or workouts. Each result includes log_entry_template, which can be copied directly into a log_workout or append_workout_exercise entry, and requires_variant_details for bucket exercises.')]
-#[IsReadOnly]
+#[Description('Resolve raw exercise phrases before logging. This tries to write short-lived discovery evidence but still returns usable matches if evidence persistence is unavailable. It does not create exercises or workouts. Each result includes log_entry_template, which can be copied directly into a log_workout or append_workout_exercise entry, and requires_variant_details for bucket exercises.')]
 class ResolveExerciseMentionsTool extends Tool
 {
     use ResolvesWorkoutUser;

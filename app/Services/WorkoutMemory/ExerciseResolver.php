@@ -9,6 +9,7 @@ use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
+use Throwable;
 
 class ExerciseResolver
 {
@@ -56,8 +57,10 @@ class ExerciseResolver
         $best = $candidates[0] ?? null;
         $attempt = null;
 
+        $attemptResult = ['attempt' => null, 'warning' => null];
+
         if ($persistEvidence && $query !== '') {
-            $attempt = $this->storeAttempt(
+            $attemptResult = $this->tryStoreAttempt(
                 user: $user,
                 rawPhrase: $query,
                 normalizedPhrase: $normalized,
@@ -66,6 +69,7 @@ class ExerciseResolver
                 best: $best,
                 suggestedAction: $this->suggestedAction($best, null),
             );
+            $attempt = $attemptResult['attempt'];
         }
 
         return [
@@ -75,6 +79,8 @@ class ExerciseResolver
             'candidates' => $candidates,
             'creating_new_exercise_recommended' => $best === null || $best['confidence'] < 0.60,
             'duplicate_risk' => $this->duplicateRisk($best),
+            'evidence_persisted' => $attempt !== null,
+            'evidence_persistence_warning' => $attemptResult['warning'],
         ];
     }
 
@@ -181,7 +187,7 @@ class ExerciseResolver
 
         $usesPhraseMemory = ($best['resolution'] ?? null) === 'phrase_memory';
 
-        $attempt = $this->storeAttempt(
+        $attemptResult = $this->tryStoreAttempt(
             user: $user,
             rawPhrase: $rawPhrase,
             normalizedPhrase: $normalized,
@@ -190,6 +196,7 @@ class ExerciseResolver
             best: $resolution === 'bucket_suggestion' ? $bucketCandidate : $best,
             suggestedAction: $suggestedAction,
         );
+        $attempt = $attemptResult['attempt'];
 
         $chosenExercise = $resolution === 'bucket_suggestion'
             ? ($bucketCandidate['exercise'] ?? null)
@@ -197,7 +204,7 @@ class ExerciseResolver
         $variantLabel = $usesPhraseMemory ? $memory?->variant_label : null;
 
         return [
-            'resolution_id' => $attempt->resolution_id,
+            'resolution_id' => $attempt?->resolution_id,
             'raw_phrase' => $rawPhrase,
             'resolution' => $resolution,
             'resolution_type' => $resolution,
@@ -211,10 +218,12 @@ class ExerciseResolver
             'suggested_action' => $suggestedAction,
             'recommended_bucket_exercise' => $bucketCandidate['exercise'] ?? null,
             'requires_variant_details' => ($chosenExercise['granularity'] ?? null) === 'bucket',
+            'evidence_persisted' => $attempt !== null,
+            'evidence_persistence_warning' => $attemptResult['warning'],
             'log_entry_template' => [
                 'raw_phrase' => $rawPhrase,
                 'exercise_id' => $chosenExercise['id'] ?? null,
-                'resolution_id' => $attempt->resolution_id,
+                'resolution_id' => $attempt?->resolution_id,
                 'variant_label' => $variantLabel,
             ],
             'candidates' => $topCandidates,
@@ -231,9 +240,10 @@ class ExerciseResolver
         $equipment = collect($filters['equipment'] ?? [])->filter()->map(fn (mixed $value): string => self::normalize((string) $value));
         $muscle = self::normalize((string) ($filters['muscle'] ?? ''));
         $tags = collect($filters['tags'] ?? [])->filter()->map(fn (mixed $value): string => self::normalize((string) $value));
+        $searchPhrases = $this->searchPhrases($normalized);
 
         return $exercises
-            ->map(function (Exercise $exercise) use ($user, $normalized, $rawPhrase, $equipment, $muscle, $tags): ?array {
+            ->map(function (Exercise $exercise) use ($user, $normalized, $rawPhrase, $equipment, $muscle, $tags, $searchPhrases): ?array {
                 $name = self::normalize($exercise->name);
                 $aliasMatches = $exercise->aliases
                     ->map(fn ($alias): string => $alias->normalized_alias)
@@ -244,13 +254,13 @@ class ExerciseResolver
                 $resolution = 'variant';
                 $score = 0.0;
 
-                if ($normalized !== '' && $normalized === $name) {
+                if ($normalized !== '' && $searchPhrases->contains($name)) {
                     $score = 1.0;
                     $resolution = 'exact';
                     $reason = 'Exact exercise name match.';
                 }
 
-                if ($score < 0.98 && $aliasMatches->contains($normalized)) {
+                if ($score < 0.98 && $aliasMatches->intersect($searchPhrases)->isNotEmpty()) {
                     $score = 0.98;
                     $resolution = 'alias';
                     $reason = 'Exact alias match.';
@@ -258,15 +268,22 @@ class ExerciseResolver
 
                 if ($normalized !== '' && $score < 0.98) {
                     $aliasScore = $aliasMatches
-                        ->map(fn (string $alias): float => $this->textScore($normalized, $alias))
+                        ->flatMap(fn (string $alias): array => $searchPhrases
+                            ->map(fn (string $phrase): float => $this->textScore($phrase, $alias))
+                            ->all())
                         ->max() ?? 0.0;
-                    $nameScore = $this->textScore($normalized, $name);
+                    $nameScore = $searchPhrases
+                        ->map(fn (string $phrase): float => $this->textScore($phrase, $name))
+                        ->max() ?? 0.0;
                     $score = max($score, $aliasScore, $nameScore);
                 }
 
                 if ($score < 0.94 && $this->looksWeighted($rawPhrase) && str_starts_with($name, 'weighted ')) {
                     $unweightedName = trim(substr($name, strlen('weighted ')));
-                    $score = max($score, $this->textScore($normalized, $unweightedName) + 0.12);
+                    $weightedScore = $searchPhrases
+                        ->map(fn (string $phrase): float => $this->textScore($phrase, $unweightedName) + 0.12)
+                        ->max() ?? 0.0;
+                    $score = max($score, $weightedScore);
                     $reason = 'Load in phrase points to the weighted variant.';
                 }
 
@@ -326,7 +343,33 @@ class ExerciseResolver
     private function looksWeighted(string $rawPhrase): bool
     {
         return str_contains(self::normalize($rawPhrase), 'weighted')
-            || preg_match('/(?:\+|\b)\d+(?:\.\d+)?\s*(kg|lb|lbs)\b/i', $rawPhrase) === 1;
+            || preg_match('/\+\s*\d+(?:\.\d+)?\s*(kg|lb|lbs)\b/i', $rawPhrase) === 1;
+    }
+
+    /**
+     * @return Collection<int, string>
+     */
+    private function searchPhrases(string $normalized): Collection
+    {
+        if ($normalized === '') {
+            return collect(['']);
+        }
+
+        $withoutLoads = (string) Str::of($normalized)
+            ->replaceMatches('/\b(?:at|with|using|plus)?\s*\+?\d+(?:\.\d+)?\s*(?:kg|kgs|kilogram|kilograms|lb|lbs|pound|pounds)\b/', ' ')
+            ->replaceMatches('/\b(?:at|with|using|plus)\s*$/', ' ')
+            ->replaceMatches('/\s+/', ' ')
+            ->trim();
+
+        $singularized = (string) Str::of($withoutLoads)
+            ->replaceMatches('/\bpistols\b/', 'pistol')
+            ->replaceMatches('/\bsquats\b/', 'squat')
+            ->trim();
+
+        return collect([$normalized, $withoutLoads, $singularized])
+            ->filter(fn (string $phrase): bool => $phrase !== '')
+            ->unique()
+            ->values();
     }
 
     /**
@@ -435,6 +478,45 @@ class ExerciseResolver
             'suggested_action' => $suggestedAction,
             'expires_at' => now()->addDay(),
         ]);
+    }
+
+    /**
+     * Discovery evidence is helpful, but logging should not fail when SQLite is
+     * temporarily locked or the evidence table is unavailable.
+     *
+     * @param  list<array<string, mixed>>  $candidates
+     * @return array{attempt: ExerciseResolutionAttempt|null, warning: string|null}
+     */
+    private function tryStoreAttempt(
+        User $user,
+        string $rawPhrase,
+        string $normalizedPhrase,
+        ?string $context,
+        array $candidates,
+        ?array $best,
+        string $suggestedAction,
+    ): array {
+        try {
+            return [
+                'attempt' => $this->storeAttempt(
+                    user: $user,
+                    rawPhrase: $rawPhrase,
+                    normalizedPhrase: $normalizedPhrase,
+                    context: $context,
+                    candidates: $candidates,
+                    best: $best,
+                    suggestedAction: $suggestedAction,
+                ),
+                'warning' => null,
+            ];
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return [
+                'attempt' => null,
+                'warning' => 'Resolution evidence could not be persisted. Continue with raw_phrase; log_workout and append_workout_exercise can resolve server-side.',
+            ];
+        }
     }
 
     private function visibleExercises(User $user): Builder

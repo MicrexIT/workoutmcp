@@ -7,6 +7,7 @@ use App\Mcp\Tools\GetCurrentWorkoutSessionTool;
 use App\Mcp\Tools\GetUserContextTool;
 use App\Mcp\Tools\RememberExercisePhraseTool;
 use App\Mcp\Tools\ResolveExerciseMentionsTool;
+use App\Mcp\Tools\SearchExercisesTool;
 use App\Models\Exercise;
 use App\Models\ExercisePhraseMemory;
 use App\Models\ExerciseResolutionAttempt;
@@ -21,6 +22,7 @@ use App\Services\WorkoutMemory\WorkoutLogger;
 use App\Services\WorkoutMemory\WorkoutSessionManager;
 use App\Services\WorkoutMemory\WorkoutUpdater;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\Fluent\AssertableJson;
 use Tests\TestCase;
 
@@ -81,6 +83,51 @@ class WorkoutMemoryMcpTest extends TestCase
         $this->assertSame('Indoor Ride', $results['spinning']['exercise']['name']);
         $this->assertSame('Handstand Accessory Drill', $results['handstand drills']['exercise']['name']);
         $this->assertSame('Mobility Flow', $results['mobility training']['exercise']['name']);
+    }
+
+    public function test_resolver_handles_loaded_leg_day_phrases(): void
+    {
+        $user = app(CurrentUserResolver::class)->user();
+
+        $results = collect(app(ExerciseResolver::class)->resolveMentions($user, [
+            ['raw_phrase' => 'Leg press', 'context' => '40 x 80 kg, 30 x 120 kg, 24 x 160 kg, 20 x 200 kg, 10 x 230 kg'],
+            ['raw_phrase' => 'Calves at 230 kg', 'context' => '5 sets x 15 reps x 230 kg on the leg press machine'],
+            ['raw_phrase' => 'Weighted pistol squats', 'context' => '3 sets x 3 reps per leg x 10 kg'],
+            ['raw_phrase' => 'Handstand drills', 'context' => '15 minutes'],
+        ], 'legs + handstand drills'))->keyBy('raw_phrase');
+
+        $this->assertSame('Leg Press', $results['Leg press']['exercise']['name']);
+        $this->assertSame('Calf Press on Leg Press', $results['Calves at 230 kg']['exercise']['name']);
+        $this->assertSame('Weighted Pistol Squat', $results['Weighted pistol squats']['exercise']['name']);
+        $this->assertSame('Handstand Accessory Drill', $results['Handstand drills']['exercise']['name']);
+    }
+
+    public function test_resolver_returns_matches_when_evidence_persistence_fails(): void
+    {
+        $user = app(CurrentUserResolver::class)->user();
+
+        DB::unprepared(<<<'SQL'
+CREATE TEMP TRIGGER fail_exercise_resolution_attempt_insert
+BEFORE INSERT ON exercise_resolution_attempts
+BEGIN
+    SELECT RAISE(ABORT, 'blocked');
+END;
+SQL);
+
+        try {
+            $result = app(ExerciseResolver::class)->resolveMentions($user, [
+                ['raw_phrase' => 'leg press'],
+            ])[0];
+        } finally {
+            DB::unprepared('DROP TRIGGER IF EXISTS fail_exercise_resolution_attempt_insert');
+        }
+
+        $this->assertSame('Leg Press', $result['exercise']['name']);
+        $this->assertNull($result['resolution_id']);
+        $this->assertFalse($result['evidence_persisted']);
+        $this->assertNotNull($result['evidence_persistence_warning']);
+        $this->assertSame('leg press', $result['log_entry_template']['raw_phrase']);
+        $this->assertNull($result['log_entry_template']['resolution_id']);
     }
 
     public function test_resolver_prefers_exact_catalog_alias_over_conflicting_phrase_memory(): void
@@ -826,6 +873,14 @@ class WorkoutMemoryMcpTest extends TestCase
             ->where('ok', true)
             ->where('results.0.exercise.name', 'Weighted Ring Muscle-Up')
             ->has('results.0.log_entry_template')
+            ->etc());
+
+        WorkoutMemoryServer::tool(SearchExercisesTool::class, [
+            'query' => 'Calves at 230 kg',
+            'limit' => 3,
+        ])->assertStructuredContent(fn (AssertableJson $json) => $json
+            ->where('ok', true)
+            ->where('matches.0.name', 'Calf Press on Leg Press')
             ->etc());
 
         WorkoutMemoryServer::tool(RememberExercisePhraseTool::class, [
