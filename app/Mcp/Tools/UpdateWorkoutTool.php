@@ -15,7 +15,7 @@ use Laravel\Mcp\Server\Tools\Annotations\IsDestructive;
 use Laravel\Mcp\Server\Tools\Annotations\IsIdempotent;
 
 #[Name('update_workout')]
-#[Description('Correct a logged workout with explicit operations. Removing exercises or sets requires user_confirmed_destructive_change=true. add_exercise operations accept the same entry shape as log_workout exercises (raw_phrase plus optional exercise_id/resolution_id) and resolve server-side, auto-creating a flagged exercise as a last resort; ids that contradict the raw_phrase are ignored and reported in ignored_exercise_hints.')]
+#[Description('Correct a logged workout with explicit operations. Removing exercises or sets requires user_confirmed_destructive_change=true. add_exercise operations accept the same entry shape as log_workout exercises (raw_phrase plus optional exercise_id/resolution_id) and resolve server-side, auto-creating a flagged exercise as a last resort; ids that contradict the raw_phrase are ignored and reported in ignored_exercise_hints. A reopen_session operation sets a wrongly-completed workout back to in_progress (requires no other in-progress session) so live appends target it again.')]
 #[IsIdempotent]
 #[IsDestructive]
 class UpdateWorkoutTool extends Tool

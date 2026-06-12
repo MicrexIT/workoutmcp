@@ -14,6 +14,7 @@ class WorkoutLogger
         private readonly UnitNormalizer $unitNormalizer,
         private readonly TrainingSummaryService $summaries,
         private readonly WorkoutExerciseWriter $exerciseWriter,
+        private readonly WorkoutSessionManager $sessions,
     ) {}
 
     /**
@@ -34,6 +35,12 @@ class WorkoutLogger
             ];
         }
 
+        $activeSessionConflict = $this->activeSessionConflict($user, $input);
+
+        if ($activeSessionConflict !== null) {
+            return $activeSessionConflict;
+        }
+
         $validation = $this->exerciseWriter->validateExercises($user, $input['exercises'] ?? []);
 
         if ($validation !== []) {
@@ -44,6 +51,13 @@ class WorkoutLogger
                 'saved_session' => null,
                 'normalized_summary' => null,
             ];
+        }
+
+        $autoFinishedStaleSession = null;
+        $staleActive = $this->sessions->activeSession($user);
+
+        if ($staleActive !== null && $this->sessions->isStaleActiveSession($staleActive)) {
+            $autoFinishedStaleSession = $this->sessions->autoFinishStaleSession($user, $staleActive);
         }
 
         $possibleDuplicate = $this->possibleDuplicate($user, $input);
@@ -92,10 +106,49 @@ class WorkoutLogger
             'refused' => false,
             'idempotent_replay' => false,
             'possible_duplicate' => $possibleDuplicate,
+            'auto_finished_stale_session' => $autoFinishedStaleSession,
             'unresolved_or_ambiguous_items' => [],
             ...$this->exerciseWriter->outcomeSummary($outcomes),
             'saved_session' => $this->summaries->workout($session),
             'normalized_summary' => $this->normalizedSummary($session),
+        ];
+    }
+
+    /**
+     * A completed-workout log that overlaps an open live session is ambiguous:
+     * the entries may belong to that session (or BE that session, wrongly left
+     * open). Ask once instead of silently creating a parallel workout. Logs
+     * clearly predating the active session pass through untouched.
+     *
+     * @param  array<string, mixed>  $input
+     * @return array<string, mixed>|null
+     */
+    private function activeSessionConflict(User $user, array $input): ?array
+    {
+        if ((bool) ($input['user_confirmed_separate_workout'] ?? false)) {
+            return null;
+        }
+
+        $active = $this->sessions->activeSession($user);
+
+        if ($active === null || $active->started_at === null) {
+            return null;
+        }
+
+        if ($this->occurredAt($input)->lt($active->started_at)) {
+            return null;
+        }
+
+        return [
+            'refused' => true,
+            'refusal_reason' => 'An in-progress workout session is open and this workout overlaps it.',
+            'needs_confirmation' => true,
+            'active_session' => $this->summaries->workout($active),
+            'active_session_is_stale' => $this->sessions->isStaleActiveSession($active),
+            'confirmation_hint' => 'If these exercises belong to the live session, use append_workout_exercise and finish_workout_session instead. If this really is a separate workout, retry log_workout with user_confirmed_separate_workout=true.',
+            'unresolved_or_ambiguous_items' => [],
+            'saved_session' => null,
+            'normalized_summary' => null,
         ];
     }
 

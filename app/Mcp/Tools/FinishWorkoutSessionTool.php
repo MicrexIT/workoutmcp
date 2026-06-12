@@ -14,7 +14,7 @@ use Laravel\Mcp\Server\Tool;
 use Laravel\Mcp\Server\Tools\Annotations\IsIdempotent;
 
 #[Name('finish_workout_session')]
-#[Description('Finish the active in-progress workout when the user says they are done. Sets status=completed and can store final RPE, bodyweight, notes, and completed_at. Do not use this to log an older completed workout; use log_workout for that. Provide a stable per-action idempotency_key such as "<message_id>:finish".')]
+#[Description('Finish the active in-progress workout when the user says they are done. Sets status=completed and can store final RPE, bodyweight, notes, and completed_at. Always works on the current active session, even one left open for a long time. Do not use this to log an older completed workout; use log_workout for that. If the session was finished by mistake, update_workout with a reopen_session operation undoes it. Provide a stable per-action idempotency_key such as "<message_id>:finish".')]
 #[IsIdempotent]
 class FinishWorkoutSessionTool extends Tool
 {

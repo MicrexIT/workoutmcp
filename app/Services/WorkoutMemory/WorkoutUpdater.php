@@ -47,6 +47,23 @@ class WorkoutUpdater
                     );
                 }
             }
+
+            if ($type === 'reopen_session') {
+                if ($session->status !== 'completed') {
+                    return $this->refused('Only a completed workout can be reopened.');
+                }
+
+                $active = WorkoutSession::query()
+                    ->where('user_id', $user->id)
+                    ->where('status', 'in_progress')
+                    ->first();
+
+                if ($active !== null) {
+                    return $this->refused('An in-progress workout session already exists. Finish it before reopening another workout.', [
+                        'active_session' => $this->summaries->workout($active),
+                    ]);
+                }
+            }
         }
 
         $outcomes = [];
@@ -67,6 +84,7 @@ class WorkoutUpdater
                 'event_type' => 'updated',
                 'reason' => $input['reason'] ?? null,
                 'metadata' => ['operations' => $operations],
+                'occurred_at' => now(),
             ]);
         }, attempts: 3);
 
@@ -133,6 +151,13 @@ class WorkoutUpdater
 
             case 'add_exercise':
                 $outcome = $this->addExercise($user, $session, $operation);
+                break;
+
+            case 'reopen_session':
+                $session->update([
+                    'status' => 'in_progress',
+                    'completed_at' => null,
+                ]);
                 break;
 
             case 'update_exercise':

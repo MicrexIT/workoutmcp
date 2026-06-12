@@ -35,7 +35,6 @@ class AppendSessionStoryTool extends Tool
             'idempotency_key' => ['required', 'string', 'max:255'],
             'source_message_id' => ['sometimes', 'nullable', 'string', 'max:255'],
             'user_confirmed_recent_target' => ['sometimes', 'boolean'],
-            'user_confirmed_stale_active_session' => ['sometimes', 'boolean'],
             'user_confirmed_current_session' => ['sometimes', 'boolean'],
         ]);
 
@@ -57,7 +56,6 @@ class AppendSessionStoryTool extends Tool
             'idempotency_key' => $schema->string()->description('Stable per-story key. Reuse on retry; do not reuse for an exercise append.')->required(),
             'source_message_id' => $schema->string()->nullable(),
             'user_confirmed_recent_target' => $schema->boolean()->default(false),
-            'user_confirmed_stale_active_session' => $schema->boolean()->default(false),
             'user_confirmed_current_session' => $schema->boolean()->default(false),
         ];
     }

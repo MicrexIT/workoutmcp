@@ -34,7 +34,6 @@ class AppendWorkoutExerciseTool extends Tool
             'idempotency_key' => ['required', 'string', 'max:255'],
             'source_message_id' => ['sometimes', 'nullable', 'string', 'max:255'],
             'user_confirmed_recent_target' => ['sometimes', 'boolean'],
-            'user_confirmed_stale_active_session' => ['sometimes', 'boolean'],
             'user_confirmed_current_session' => ['sometimes', 'boolean'],
             'exercise' => ['required', 'array'],
             'exercise.exercise_id' => ['sometimes', 'nullable', 'integer'],
@@ -82,7 +81,6 @@ class AppendWorkoutExerciseTool extends Tool
             'idempotency_key' => $schema->string()->description('Stable per-exercise append key. Reuse on retry; never reuse for another exercise or story event.')->required(),
             'source_message_id' => $schema->string()->nullable(),
             'user_confirmed_recent_target' => $schema->boolean()->default(false),
-            'user_confirmed_stale_active_session' => $schema->boolean()->default(false),
             'user_confirmed_current_session' => $schema->boolean()->default(false),
             'exercise' => $schema->object([
                 'raw_phrase' => $schema->string()->description('The user\'s wording for the exercise. Always send it so the server can resolve or correct catalog matches.')->required(),

@@ -36,6 +36,7 @@ class WorkoutSessionManager
                 'current_live_workout' => 'Use append_session_story or append_workout_exercise with target_session=active_or_new.',
                 'just_logged_or_last_session' => 'Use append_workout_exercise with target_session=latest_completed when the user clearly refers to the most recent completed session.',
                 'past_completed_workout' => 'Use log_workout for a completed workout from earlier instead of creating an active session.',
+                'stale_or_wrongly_completed' => 'An in-progress session inactive for over 18 hours auto-completes on the next write. To continue a workout that was wrongly completed, use update_workout with a reopen_session operation.',
             ],
         ];
     }
@@ -58,6 +59,12 @@ class WorkoutSessionManager
         }
 
         $active = $this->activeSession($user);
+        $autoFinished = null;
+
+        if ($active !== null && $this->isStaleActiveSession($active)) {
+            $autoFinished = $this->autoFinishStaleSession($user, $active);
+            $active = null;
+        }
 
         if ($active !== null) {
             return [
@@ -65,7 +72,6 @@ class WorkoutSessionManager
                 'idempotent_replay' => false,
                 'session_was_created' => false,
                 'session_was_resumed' => true,
-                'active_session_is_stale' => $this->isStaleActiveSession($active),
                 'active_session' => $this->summaries->workout($active),
             ];
         }
@@ -99,6 +105,7 @@ class WorkoutSessionManager
             'idempotent_replay' => false,
             'session_was_created' => true,
             'session_was_resumed' => false,
+            'auto_finished_stale_session' => $autoFinished,
             'active_session' => $this->summaries->workout($session->fresh(['exercises.sets', 'exercises.exercise', 'changeEvents'])),
         ];
     }
@@ -139,6 +146,7 @@ class WorkoutSessionManager
                 'refused' => false,
                 'idempotent_replay' => false,
                 'target_resolution' => $target['target_resolution'],
+                'auto_finished_stale_session' => $target['auto_finished_stale_session'] ?? null,
                 'story_event' => $this->eventSummary($event),
                 'session' => $this->summaries->workout($session->fresh(['exercises.sets', 'exercises.exercise', 'changeEvents'])),
             ];
@@ -194,6 +202,7 @@ class WorkoutSessionManager
                 'refused' => false,
                 'idempotent_replay' => false,
                 'target_resolution' => $target['target_resolution'],
+                'auto_finished_stale_session' => $target['auto_finished_stale_session'] ?? null,
                 'append_event' => $this->eventSummary($event),
                 'appended_exercise_id' => $workoutExercise->id,
                 ...$this->exerciseWriter->outcomeSummary([$outcome]),
@@ -221,10 +230,15 @@ class WorkoutSessionManager
                 return $this->eventReplayResponse($existingEvent, 'finish_event');
             }
 
-            $target = $this->targetSession($user, [...$input, 'target_session' => 'active'], allowAutoStart: false, lock: true);
+            $target = $this->targetSession($user, [...$input, 'target_session' => 'active'], allowAutoStart: false, lock: true, allowStaleActive: true);
 
             if (($target['refused'] ?? false) === true) {
-                return $target;
+                $latestCompleted = $this->latestCompletedSession($user);
+
+                return $this->refused('No active workout session to finish.', [
+                    'latest_completed_session' => $latestCompleted ? $this->summaries->workout($latestCompleted) : null,
+                    'confirmation_hint' => 'The most recent session is already completed. Use append_workout_exercise with target_session=latest_completed or update_workout to amend it, or update_workout with a reopen_session operation to continue it.',
+                ]);
             }
 
             /** @var WorkoutSession $session */
@@ -264,7 +278,7 @@ class WorkoutSessionManager
         }, attempts: 3);
     }
 
-    private function activeSession(User $user, bool $lock = false): ?WorkoutSession
+    public function activeSession(User $user, bool $lock = false): ?WorkoutSession
     {
         $query = WorkoutSession::query()
             ->where('user_id', $user->id)
@@ -293,10 +307,14 @@ class WorkoutSessionManager
     }
 
     /**
+     * Resolve which session an append/finish targets. A stale active session is
+     * auto-completed here (the next write self-heals the state) unless the caller
+     * is the finish flow, which must be able to close a stale session itself.
+     *
      * @param  array<string, mixed>  $input
      * @return array<string, mixed>
      */
-    private function targetSession(User $user, array $input, bool $allowAutoStart, bool $lock): array
+    private function targetSession(User $user, array $input, bool $allowAutoStart, bool $lock, bool $allowStaleActive = false): array
     {
         if (isset($input['workout_id'])) {
             $session = WorkoutSession::query()
@@ -337,21 +355,21 @@ class WorkoutSessionManager
         }
 
         $active = $this->activeSession($user, $lock);
+        $autoFinished = null;
+
+        if ($active !== null && $this->isStaleActiveSession($active) && ! $allowStaleActive) {
+            $autoFinished = $this->autoFinishStaleSession($user, $active);
+            $active = null;
+        }
 
         if ($active !== null) {
-            if ($this->isStaleActiveSession($active) && ! (bool) ($input['user_confirmed_stale_active_session'] ?? false)) {
-                return $this->refused('The active workout is stale and should not be updated without confirmation.', [
-                    'needs_confirmation' => true,
-                    'confirmation_hint' => 'Ask whether to keep using this active session, finish it, or start a new one.',
-                    'active_session' => $this->summaries->workout($active),
-                ]);
-            }
-
             return ['session' => $active, 'target_resolution' => 'active'];
         }
 
         if ($target === 'active') {
-            return $this->refused('No active workout session exists. Use start_workout_session first or append with target_session=active_or_new for a current live workout.');
+            return $this->refused('No active workout session exists. Use start_workout_session first or append with target_session=active_or_new for a current live workout.', [
+                'auto_finished_stale_session' => $autoFinished,
+            ]);
         }
 
         if (! $allowAutoStart) {
@@ -387,7 +405,11 @@ class WorkoutSessionManager
             'raw_input' => $input['raw_input'] ?? null,
         ], $occurredAt);
 
-        return ['session' => $created, 'target_resolution' => 'auto_started_active'];
+        return [
+            'session' => $created,
+            'target_resolution' => 'auto_started_active',
+            'auto_finished_stale_session' => $autoFinished,
+        ];
     }
 
     /**
@@ -483,9 +505,48 @@ class WorkoutSessionManager
             : now();
     }
 
-    private function isStaleActiveSession(WorkoutSession $session): bool
+    /**
+     * Staleness is measured from the last recorded activity, not the start time,
+     * so a long live session that is still receiving appends never goes stale,
+     * and a reopened session gets a fresh window from its reopen event.
+     */
+    public function isStaleActiveSession(WorkoutSession $session): bool
     {
-        return $session->started_at?->lt(now()->subHours(self::ACTIVE_SESSION_STALE_HOURS)) ?? false;
+        $lastActivity = $this->lastActivityAt($session);
+
+        return $lastActivity !== null && $lastActivity->lt(now()->subHours(self::ACTIVE_SESSION_STALE_HOURS));
+    }
+
+    /**
+     * Complete an abandoned in-progress session as of its last activity and
+     * record an auditable event. Returns the completed session summary so
+     * callers can surface what happened to the model.
+     *
+     * @return array<string, mixed>
+     */
+    public function autoFinishStaleSession(User $user, WorkoutSession $session): array
+    {
+        $completedAt = $this->lastActivityAt($session) ?? now();
+
+        $session->update([
+            'status' => 'completed',
+            'completed_at' => $completedAt,
+        ]);
+
+        $this->recordEvent($user, $session, 'auto_finished', [], [
+            'reason' => 'In-progress session was inactive past the stale window and was auto-completed.',
+        ], $completedAt);
+
+        return $this->summaries->workout($session->fresh(['exercises.sets', 'exercises.exercise', 'changeEvents']));
+    }
+
+    private function lastActivityAt(WorkoutSession $session): ?Carbon
+    {
+        $latestEvent = $session->changeEvents()->max('occurred_at');
+
+        return collect([$session->started_at, $latestEvent === null ? null : Carbon::parse($latestEvent)])
+            ->filter()
+            ->max();
     }
 
     private function isOldCompletedTarget(WorkoutSession $session): bool

@@ -921,6 +921,224 @@ SQL);
         $this->assertSame(['Ring Dip', 'Leg Press'], collect($appended['session']['exercises'])->pluck('name')->all());
     }
 
+    public function test_finish_works_on_a_stale_active_session(): void
+    {
+        $user = app(CurrentUserResolver::class)->user();
+        $manager = app(WorkoutSessionManager::class);
+
+        $started = $manager->start($user, [
+            'name' => 'Forgotten legs',
+            'occurred_at' => now()->subHours(20)->toISOString(),
+            'idempotency_key' => 'stale-start',
+        ]);
+
+        $finished = $manager->finish($user, [
+            'idempotency_key' => 'stale-finish',
+            'perceived_effort' => 7,
+        ]);
+
+        $this->assertFalse($started['refused']);
+        $this->assertFalse($finished['refused']);
+        $this->assertSame($started['active_session']['id'], $finished['session']['id']);
+        $this->assertSame('completed', $finished['session']['status']);
+    }
+
+    public function test_finish_without_active_session_points_to_latest_completed(): void
+    {
+        $user = app(CurrentUserResolver::class)->user();
+        $logged = app(WorkoutLogger::class)->log($user, [
+            'raw_input' => 'ring dips 1x8',
+            'exercises' => [['raw_phrase' => 'ring dips', 'sets' => [['reps' => 8]]]],
+        ]);
+
+        $finished = app(WorkoutSessionManager::class)->finish($user, [
+            'idempotency_key' => 'finish-nothing',
+        ]);
+
+        $this->assertTrue($finished['refused']);
+        $this->assertSame('No active workout session to finish.', $finished['refusal_reason']);
+        $this->assertSame($logged['saved_session']['id'], $finished['latest_completed_session']['id']);
+    }
+
+    public function test_append_auto_finishes_stale_active_session_and_starts_fresh(): void
+    {
+        $user = app(CurrentUserResolver::class)->user();
+        $manager = app(WorkoutSessionManager::class);
+
+        $started = $manager->start($user, [
+            'name' => 'Abandoned session',
+            'occurred_at' => now()->subHours(20)->toISOString(),
+            'idempotency_key' => 'abandoned-start',
+        ]);
+
+        $appended = $manager->appendExercise($user, [
+            'raw_input' => 'Log leg press 3x10 at 100kg.',
+            'idempotency_key' => 'fresh-append',
+            'exercise' => [
+                'raw_phrase' => 'leg press',
+                'sets' => array_fill(0, 3, ['reps' => 10, 'load_value' => 100, 'load_unit' => 'kg']),
+            ],
+        ]);
+
+        $this->assertFalse($appended['refused']);
+        $this->assertSame('auto_started_active', $appended['target_resolution']);
+        $this->assertSame($started['active_session']['id'], $appended['auto_finished_stale_session']['id']);
+        $this->assertNotSame($started['active_session']['id'], $appended['session']['id']);
+        $this->assertSame('in_progress', $appended['session']['status']);
+        $this->assertDatabaseHas('workout_sessions', [
+            'id' => $started['active_session']['id'],
+            'status' => 'completed',
+        ]);
+        $this->assertDatabaseHas('workout_change_events', [
+            'workout_session_id' => $started['active_session']['id'],
+            'event_type' => 'auto_finished',
+        ]);
+    }
+
+    public function test_log_workout_overlapping_active_session_requires_confirmation(): void
+    {
+        $user = app(CurrentUserResolver::class)->user();
+        $manager = app(WorkoutSessionManager::class);
+        $started = $manager->start($user, ['name' => 'Live legs', 'idempotency_key' => 'live-start']);
+
+        $payload = [
+            'raw_input' => 'Did 5x5 bench at 80kg, done for today.',
+            'exercises' => [[
+                'raw_phrase' => 'bench press',
+                'sets' => array_fill(0, 5, ['reps' => 5, 'load_value' => 80, 'load_unit' => 'kg']),
+            ]],
+        ];
+
+        $refused = app(WorkoutLogger::class)->log($user, $payload);
+
+        $this->assertTrue($refused['refused']);
+        $this->assertTrue($refused['needs_confirmation']);
+        $this->assertSame($started['active_session']['id'], $refused['active_session']['id']);
+        $this->assertSame(1, WorkoutSession::query()->count());
+
+        $confirmed = app(WorkoutLogger::class)->log($user, [
+            ...$payload,
+            'user_confirmed_separate_workout' => true,
+        ]);
+
+        $this->assertFalse($confirmed['refused']);
+        $this->assertSame(2, WorkoutSession::query()->count());
+        $this->assertDatabaseHas('workout_sessions', [
+            'id' => $started['active_session']['id'],
+            'status' => 'in_progress',
+        ]);
+    }
+
+    public function test_log_workout_predating_the_active_session_needs_no_confirmation(): void
+    {
+        $user = app(CurrentUserResolver::class)->user();
+        app(WorkoutSessionManager::class)->start($user, ['name' => 'Evening session', 'idempotency_key' => 'evening-start']);
+
+        $logged = app(WorkoutLogger::class)->log($user, [
+            'occurred_at' => now()->subHours(6)->toISOString(),
+            'raw_input' => 'This morning: ring dips 3x8.',
+            'exercises' => [['raw_phrase' => 'ring dips', 'sets' => array_fill(0, 3, ['reps' => 8])]],
+        ]);
+
+        $this->assertFalse($logged['refused']);
+        $this->assertSame(2, WorkoutSession::query()->count());
+    }
+
+    public function test_log_workout_confirmed_separate_auto_finishes_stale_active(): void
+    {
+        $user = app(CurrentUserResolver::class)->user();
+        $manager = app(WorkoutSessionManager::class);
+        $started = $manager->start($user, [
+            'name' => 'Stuck session',
+            'occurred_at' => now()->subHours(20)->toISOString(),
+            'idempotency_key' => 'stuck-start',
+        ]);
+
+        $logged = app(WorkoutLogger::class)->log($user, [
+            'raw_input' => 'Ring dips 3x8, separate from whatever is open.',
+            'user_confirmed_separate_workout' => true,
+            'exercises' => [['raw_phrase' => 'ring dips', 'sets' => array_fill(0, 3, ['reps' => 8])]],
+        ]);
+
+        $this->assertFalse($logged['refused']);
+        $this->assertSame($started['active_session']['id'], $logged['auto_finished_stale_session']['id']);
+        $this->assertDatabaseHas('workout_sessions', [
+            'id' => $started['active_session']['id'],
+            'status' => 'completed',
+        ]);
+    }
+
+    public function test_update_workout_reopen_session_continues_a_wrongly_completed_workout(): void
+    {
+        $user = app(CurrentUserResolver::class)->user();
+        $manager = app(WorkoutSessionManager::class);
+        $updater = app(WorkoutUpdater::class);
+
+        $logged = app(WorkoutLogger::class)->log($user, [
+            'raw_input' => 'leg press 3x10 at 100kg',
+            'exercises' => [[
+                'raw_phrase' => 'leg press',
+                'sets' => array_fill(0, 3, ['reps' => 10, 'load_value' => 100, 'load_unit' => 'kg']),
+            ]],
+        ]);
+        $workoutId = $logged['saved_session']['id'];
+
+        $reopened = $updater->update($user, [
+            'workout_id' => $workoutId,
+            'reason' => 'User is still training; completion was a mistake.',
+            'operations' => [['type' => 'reopen_session']],
+        ]);
+
+        $this->assertFalse($reopened['refused']);
+        $this->assertSame('in_progress', $reopened['updated_workout']['status']);
+        $this->assertSame($workoutId, $manager->current($user)['active_session']['id']);
+
+        $appended = $manager->appendExercise($user, [
+            'raw_input' => 'Also weighted pistol squats 3x3 at 10kg.',
+            'idempotency_key' => 'reopen-append',
+            'exercise' => [
+                'raw_phrase' => 'weighted pistol squats',
+                'sets' => array_fill(0, 3, ['reps' => 3, 'load_value' => 10, 'load_unit' => 'kg']),
+            ],
+        ]);
+
+        $finished = $manager->finish($user, ['idempotency_key' => 'reopen-finish']);
+
+        $this->assertFalse($appended['refused']);
+        $this->assertSame($workoutId, $appended['session']['id']);
+        $this->assertSame('active', $appended['target_resolution']);
+        $this->assertFalse($finished['refused']);
+        $this->assertSame($workoutId, $finished['session']['id']);
+        $this->assertSame(
+            ['Leg Press', 'Weighted Pistol Squat'],
+            collect($finished['session']['exercises'])->pluck('name')->all(),
+        );
+        $this->assertSame(1, WorkoutSession::query()->count());
+    }
+
+    public function test_reopen_session_refuses_while_another_session_is_active(): void
+    {
+        $user = app(CurrentUserResolver::class)->user();
+        $logged = app(WorkoutLogger::class)->log($user, [
+            'raw_input' => 'ring dips 1x8',
+            'exercises' => [['raw_phrase' => 'ring dips', 'sets' => [['reps' => 8]]]],
+        ]);
+
+        app(WorkoutSessionManager::class)->start($user, ['name' => 'New live session', 'idempotency_key' => 'live-now']);
+
+        $refused = app(WorkoutUpdater::class)->update($user, [
+            'workout_id' => $logged['saved_session']['id'],
+            'operations' => [['type' => 'reopen_session']],
+        ]);
+
+        $this->assertTrue($refused['refused']);
+        $this->assertStringContainsString('in-progress workout session already exists', $refused['refusal_reason']);
+        $this->assertDatabaseHas('workout_sessions', [
+            'id' => $logged['saved_session']['id'],
+            'status' => 'completed',
+        ]);
+    }
+
     public function test_append_active_or_new_refuses_old_completed_workout_context(): void
     {
         $user = app(CurrentUserResolver::class)->user();

@@ -14,7 +14,7 @@ use Laravel\Mcp\Server\Tool;
 use Laravel\Mcp\Server\Tools\Annotations\IsIdempotent;
 
 #[Name('start_workout_session')]
-#[Description('Start or resume a live in-progress workout session for phrases like "starting legs" or "I am doing leg press now". Do not use for a completed past workout; use log_workout for that. Reuse an existing active session instead of creating a second one. Provide a stable per-action idempotency_key such as "<message_id>:start".')]
+#[Description('Start or resume a live in-progress workout session for phrases like "starting legs" or "I am doing leg press now". Do not use for a completed past workout; use log_workout for that. A recent active session is resumed instead of duplicated; an active session inactive for over 18 hours is auto-completed first and reported in auto_finished_stale_session. Provide a stable per-action idempotency_key such as "<message_id>:start".')]
 #[IsIdempotent]
 class StartWorkoutSessionTool extends Tool
 {

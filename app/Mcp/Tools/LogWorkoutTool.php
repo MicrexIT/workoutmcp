@@ -14,7 +14,7 @@ use Laravel\Mcp\Server\Tool;
 use Laravel\Mcp\Server\Tools\Annotations\IsIdempotent;
 
 #[Name('log_workout')]
-#[Description('Save a completed workout in one call. Always send each entry\'s raw_phrase; exercise_id and resolution_id are optional hints (copy log_entry_template from resolve_exercise_mentions verbatim when available). Never invent exercise_id values and never use an entry\'s position number as its id — when unsure, omit exercise_id and let the server resolve raw_phrase itself: it prefers existing exercises and buckets, and as a last resort creates a clearly-flagged exercise reported in auto_created_exercises — entries are never refused or dropped for resolution reasons. Hints that contradict the raw_phrase evidence are ignored and reported in ignored_exercise_hints. Surface assumed_matches, ignored_exercise_hints, and auto_created_exercises to the user and correct with remember_exercise_phrase or update_workout.')]
+#[Description('Save a completed workout in one call. Always send each entry\'s raw_phrase; exercise_id and resolution_id are optional hints (copy log_entry_template from resolve_exercise_mentions verbatim when available). Never invent exercise_id values and never use an entry\'s position number as its id — when unsure, omit exercise_id and let the server resolve raw_phrase itself: it prefers existing exercises and buckets, and as a last resort creates a clearly-flagged exercise reported in auto_created_exercises — entries are never refused or dropped for resolution reasons. Hints that contradict the raw_phrase evidence are ignored and reported in ignored_exercise_hints. Surface assumed_matches, ignored_exercise_hints, and auto_created_exercises to the user and correct with remember_exercise_phrase or update_workout. If an in-progress session is open and this workout overlaps it, the server refuses with needs_confirmation: either append/finish the live session, or retry with user_confirmed_separate_workout=true.')]
 #[IsIdempotent]
 class LogWorkoutTool extends Tool
 {
@@ -34,6 +34,7 @@ class LogWorkoutTool extends Tool
             'perceived_effort' => ['sometimes', 'nullable', 'integer', 'min:1', 'max:10'],
             'bodyweight_value' => ['sometimes', 'nullable', 'numeric'],
             'bodyweight_unit' => ['sometimes', 'nullable', 'in:kg,lb'],
+            'user_confirmed_separate_workout' => ['sometimes', 'boolean'],
             'exercises' => ['required', 'array', 'min:1'],
             'exercises.*.exercise_id' => ['sometimes', 'nullable', 'integer'],
             'exercises.*.resolution_id' => ['sometimes', 'nullable', 'string'],
@@ -82,6 +83,7 @@ class LogWorkoutTool extends Tool
             'perceived_effort' => $schema->integer()->nullable()->description('1-10 session effort.'),
             'bodyweight_value' => $schema->number()->nullable(),
             'bodyweight_unit' => $schema->string()->enum(['kg', 'lb'])->nullable(),
+            'user_confirmed_separate_workout' => $schema->boolean()->default(false)->description('Set true only after the user confirms this workout is separate from the currently open in-progress session.'),
             'exercises' => $schema->array()->items($schema->object([
                 'raw_phrase' => $schema->string()->description('The user\'s wording for the exercise. Always send it so the server can resolve or correct catalog matches.')->required(),
                 'exercise_id' => $schema->integer()->nullable()->description('Optional hint: a real catalog id previously returned by this server (search_exercises, resolve_exercise_mentions, or workout history). Never an invented number or the entry\'s position in this list. Omit when unsure — the server resolves raw_phrase itself, and ids that contradict the raw_phrase are ignored.'),
