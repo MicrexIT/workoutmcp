@@ -1380,6 +1380,76 @@ SQL);
         ]);
     }
 
+    public function test_update_workout_correction_with_explicit_id_wins_over_phrase_evidence(): void
+    {
+        $user = app(CurrentUserResolver::class)->user();
+
+        // Production incident 2026-06-12: straddled front-lever rows resolved to a
+        // catalog entry; the user then asked for a real Front Lever Pull-Up exercise.
+        // A correction carrying the new exercise_id plus the entry's old wording was
+        // vetoed by the confident phrase resolution and reported as unchanged, so the
+        // model appended a "superseding" duplicate instead. An explicit correction id
+        // must win over phrase evidence, reporting the disagreement alongside.
+        $logged = app(WorkoutLogger::class)->log($user, [
+            'raw_input' => 'Plank 3x60s.',
+            'exercises' => [[
+                'raw_phrase' => 'plank',
+                'sets' => array_fill(0, 3, ['duration_seconds' => 60]),
+            ]],
+        ]);
+        $entry = $logged['saved_session']['exercises'][0];
+        $this->assertSame('Plank', $entry['name']);
+
+        $frontLever = app(ExerciseCreator::class)->createExercise($user, [
+            'name' => 'Front Lever Pull-Up',
+            'category' => 'other',
+            'granularity' => 'canonical',
+            'tracking_mode' => 'reps',
+        ]);
+
+        $corrected = app(WorkoutUpdater::class)->update($user, [
+            'workout_id' => $logged['saved_session']['id'],
+            'reason' => 'User wants this entry tracked as the new exercise.',
+            'operations' => [[
+                'type' => 'update_exercise',
+                'workout_exercise_id' => $entry['id'],
+                'exercise_id' => $frontLever->id,
+                'raw_phrase' => 'plank',
+            ]],
+        ]);
+
+        $this->assertFalse($corrected['refused']);
+        $outcome = $corrected['resolution_outcomes'][0];
+        $this->assertFalse($outcome['unchanged']);
+        $this->assertSame('corrected', $outcome['method']);
+        $this->assertSame($frontLever->id, $outcome['exercise_id']);
+        $this->assertSame('Plank', $outcome['phrase_resolved_elsewhere']['exercise_name']);
+        $this->assertSame([], $corrected['ignored_exercise_hints']);
+        $this->assertSame('Front Lever Pull-Up', $corrected['correction_phrase_conflicts'][0]['used_exercise_name']);
+        $this->assertSame('Plank', $corrected['correction_phrase_conflicts'][0]['phrase_exercise_name']);
+        $this->assertDatabaseHas('workout_exercises', [
+            'id' => $entry['id'],
+            'exercise_id' => $frontLever->id,
+            'name_snapshot' => 'Front Lever Pull-Up',
+            'resolution_type' => 'manual_correction',
+        ]);
+        $this->assertSame(3, WorkoutSet::query()->where('workout_exercise_id', $entry['id'])->count());
+
+        $repeat = app(WorkoutUpdater::class)->update($user, [
+            'workout_id' => $logged['saved_session']['id'],
+            'operations' => [[
+                'type' => 'update_exercise',
+                'workout_exercise_id' => $entry['id'],
+                'exercise_id' => $frontLever->id,
+                'raw_phrase' => 'plank',
+            ]],
+        ]);
+
+        $this->assertFalse($repeat['refused']);
+        $this->assertTrue($repeat['resolution_outcomes'][0]['unchanged']);
+        $this->assertStringContainsString('already mapped', $repeat['resolution_outcomes'][0]['hint']);
+    }
+
     public function test_log_workout_dated_in_the_past_keeps_that_date_and_duration(): void
     {
         $user = app(CurrentUserResolver::class)->user();
@@ -1488,6 +1558,26 @@ SQL);
         ]);
 
         $this->assertTrue($refusedUpdate['refused']);
+        // The refusal must not be a dead end: it has to say nothing was applied,
+        // steer corrections to update_exercise, and explain that the user's own
+        // request counts as confirmation for a flagged retry.
+        $this->assertStringContainsString('No operations were applied', $refusedUpdate['refusal_reason']);
+        $this->assertStringContainsString('update_exercise', $refusedUpdate['refusal_reason']);
+        $this->assertStringContainsString('counts as that confirmation', $refusedUpdate['refusal_reason']);
+        $this->assertNotEmpty(WorkoutSession::query()->findOrFail($workoutId)->exercises()->whereKey($workoutExerciseId)->get());
+
+        $confirmedRemove = $updater->update($user, [
+            'workout_id' => $workoutId,
+            'reason' => 'User asked to remove the duplicate entry.',
+            'user_confirmed_destructive_change' => true,
+            'operations' => [[
+                'type' => 'remove_exercise',
+                'workout_exercise_id' => $workoutExerciseId,
+            ]],
+        ]);
+
+        $this->assertFalse($confirmedRemove['refused']);
+        $this->assertSame([], $confirmedRemove['updated_workout']['exercises']);
 
         $refusedDelete = $updater->delete($user, $workoutId, 'mistake', false);
         $this->assertTrue($refusedDelete['refused']);

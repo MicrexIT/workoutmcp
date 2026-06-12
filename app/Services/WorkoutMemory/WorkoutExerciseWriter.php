@@ -113,16 +113,20 @@ class WorkoutExerciseWriter
     }
 
     /**
-     * Resolve a correction's target exercise through the same ladder as logging
-     * (hint corroboration, confident phrase resolution, flagged auto-creation as
-     * last resort) without creating a workout entry.
+     * Resolve a correction's target exercise without creating a workout entry.
+     * Unlike logging, a correction's provided exercise_id is authoritative: the
+     * user explicitly asked for this entry to become that exercise, so the id is
+     * honored even when the entry's wording confidently resolves elsewhere (the
+     * disagreement is reported as phrase_resolved_elsewhere instead of vetoing
+     * the correction). Phrase-only corrections climb the same ladder as logging
+     * (confident match, flagged auto-creation as last resort).
      *
      * @param  array<string, mixed>  $exerciseInput
      * @return array{exercise: Exercise, outcome: array<string, mixed>}
      */
     public function resolveCorrection(User $user, array $exerciseInput): array
     {
-        $resolved = $this->resolveEntry($user, $exerciseInput);
+        $resolved = $this->resolveEntry($user, $exerciseInput, trustProvidedExercise: true);
 
         /** @var Exercise $exercise */
         $exercise = $resolved['exercise'];
@@ -239,6 +243,18 @@ class WorkoutExerciseWriter
                 ])
                 ->values()
                 ->all(),
+            'correction_phrase_conflicts' => collect($outcomes)
+                ->filter(fn (array $outcome): bool => isset($outcome['phrase_resolved_elsewhere']))
+                ->map(fn (array $outcome): array => [
+                    'raw_phrase' => $outcome['raw_phrase'],
+                    'used_exercise_id' => $outcome['exercise_id'],
+                    'used_exercise_name' => $outcome['exercise_name'],
+                    'phrase_exercise_id' => $outcome['phrase_resolved_elsewhere']['exercise_id'],
+                    'phrase_exercise_name' => $outcome['phrase_resolved_elsewhere']['exercise_name'],
+                    'reason' => 'The explicit correction was applied as asked, but this wording usually resolves to a different exercise. Mention the new mapping to the user, and set remember_phrase=true only if the wording should mean the corrected exercise from now on.',
+                ])
+                ->values()
+                ->all(),
         ];
     }
 
@@ -249,11 +265,13 @@ class WorkoutExerciseWriter
      * Client hints are only trusted when the entry's own raw_phrase corroborates them:
      * models have echoed entry positions as exercise_ids and paired resolution_ids with
      * the wrong entries, so uncorroborated hints lose to confident phrase evidence.
+     * Corrections are the exception ($trustProvidedExercise): there the explicit id is
+     * the whole point of the operation and always wins.
      *
      * @param  array<string, mixed>  $exerciseInput
      * @return array<string, mixed>
      */
-    private function resolveEntry(User $user, array $exerciseInput): array
+    private function resolveEntry(User $user, array $exerciseInput, bool $trustProvidedExercise = false): array
     {
         $rawPhrase = trim((string) ($exerciseInput['raw_phrase'] ?? ''));
         $attempt = $this->resolutionAttempt($user, $exerciseInput['resolution_id'] ?? null);
@@ -272,7 +290,7 @@ class WorkoutExerciseWriter
         }
 
         if ($providedExercise !== null) {
-            return $this->resolveProvidedExercise($user, $providedExercise, $rawPhrase, $attempt);
+            return $this->resolveProvidedExercise($user, $providedExercise, $rawPhrase, $attempt, $trustProvidedExercise);
         }
 
         return $this->resolvePhrase($user, $rawPhrase, $exerciseInput);
@@ -377,9 +395,12 @@ class WorkoutExerciseWriter
      * resolves elsewhere the server keeps its own resolution and reports the ignored
      * hint; without a confident server alternative the explicit id is kept, flagged.
      *
+     * In a correction ($trusted) the id is not a hint but the operation's intent, so
+     * it always wins; a disagreeing phrase resolution is reported alongside instead.
+     *
      * @return array<string, mixed>
      */
-    private function resolveProvidedExercise(User $user, Exercise $exercise, string $rawPhrase, ?ExerciseResolutionAttempt $attempt): array
+    private function resolveProvidedExercise(User $user, Exercise $exercise, string $rawPhrase, ?ExerciseResolutionAttempt $attempt, bool $trusted = false): array
     {
         $base = [
             'exercise' => $exercise,
@@ -434,6 +455,28 @@ class WorkoutExerciseWriter
                 'method' => 'resolved',
                 'confidence' => $providedConfidence,
             ];
+        }
+
+        if ($trusted) {
+            $serverResolved = $this->confidentPhraseOutcome($user, $resolution, $base);
+
+            $outcome = [
+                ...$base,
+                'resolution_type' => 'manual_correction',
+                'method' => 'corrected',
+                'confidence' => 1.0,
+                'alternatives' => $this->alternativesFromCandidates($resolution['candidates'] ?? [], (int) $exercise->id),
+            ];
+
+            if ($serverResolved !== null && (int) $serverResolved['exercise']->id !== (int) $exercise->id) {
+                $outcome['phrase_resolved_elsewhere'] = [
+                    'exercise_id' => (int) $serverResolved['exercise']->id,
+                    'exercise_name' => (string) $serverResolved['exercise']->name,
+                    'confidence' => round((float) ($serverResolved['confidence'] ?? 0), 2),
+                ];
+            }
+
+            return $outcome;
         }
 
         if ($providedConfidence < 0.60) {
@@ -682,6 +725,10 @@ class WorkoutExerciseWriter
 
         if (isset($resolved['ignored_exercise_hint'])) {
             $outcome['ignored_exercise_hint'] = $resolved['ignored_exercise_hint'];
+        }
+
+        if (isset($resolved['phrase_resolved_elsewhere'])) {
+            $outcome['phrase_resolved_elsewhere'] = $resolved['phrase_resolved_elsewhere'];
         }
 
         if ($resolved['auto_created']) {

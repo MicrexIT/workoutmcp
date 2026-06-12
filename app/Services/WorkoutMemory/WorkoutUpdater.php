@@ -35,7 +35,7 @@ class WorkoutUpdater
             $type = (string) ($operation['type'] ?? '');
 
             if (in_array($type, ['remove_exercise', 'remove_set', 'merge_workout'], true) && ! $confirmedDestructive) {
-                return $this->refused('Removing exercises or sets, or merging another workout away, requires user_confirmed_destructive_change=true.');
+                return $this->refused('No operations were applied. remove_exercise, remove_set, and merge_workout need user_confirmed_destructive_change=true. The user\'s own request to delete, replace, or merge counts as that confirmation — set the flag and retry; ask the user first only when the removal is your idea rather than theirs. To fix a wrong exercise on an entry, prefer a single update_exercise with the corrected raw_phrase or exercise_id: it remaps the entry in place and keeps its sets, no flag needed. Never append a duplicate corrected entry as a workaround.');
             }
 
             if ($type === 'merge_workout') {
@@ -260,9 +260,10 @@ class WorkoutUpdater
     /**
      * Edit an entry's annotations, and correct its exercise mapping by
      * raw_phrase (resolved through the same server-side ladder as logging,
-     * never a silent no-op) or explicit exercise_id. With remember_phrase=true
-     * the corrected mapping is stored as phrase memory so the same wording
-     * resolves right next time.
+     * never a silent no-op) or explicit exercise_id, which is authoritative
+     * and is applied even when the entry's old wording confidently resolves
+     * elsewhere. With remember_phrase=true the corrected mapping is stored as
+     * phrase memory so the same wording resolves right next time.
      *
      * @param  array<string, mixed>  $operation
      * @return array<string, mixed>|null correction outcome when the exercise mapping was addressed
@@ -312,7 +313,9 @@ class WorkoutUpdater
             ];
 
             if ($unchanged) {
-                $outcome['hint'] = 'The correction resolved to the exercise already on the entry. If the user means a different exercise, find it with search_exercises and retry with its exercise_id, or create it with create_exercise first.';
+                $outcome['hint'] = isset($operation['exercise_id'])
+                    ? 'The entry is already mapped to this exact exercise, so nothing needed to change.'
+                    : 'The correction resolved to the exercise already on the entry. If the user means a different exercise, find it with search_exercises and retry with its exercise_id, or create it with create_exercise first.';
             }
 
             $rememberPhrase = trim((string) ($operation['raw_phrase'] ?? ''));
