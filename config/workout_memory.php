@@ -10,7 +10,7 @@ return [
     ],
 
     'registration' => [
-        'enabled' => (bool) env('WORKOUT_MEMORY_REGISTRATION_ENABLED', false),
+        'enabled' => (bool) env('WORKOUT_MEMORY_REGISTRATION_ENABLED', true),
     ],
 
     'mcp_private_token' => env('MCP_PRIVATE_TOKEN'),
@@ -20,6 +20,8 @@ return [
         'issuer' => env('WORKOUT_MEMORY_OAUTH_ISSUER', env('WORKOUT_MEMORY_PUBLIC_URL', env('APP_URL', 'http://localhost'))),
         'authorization_code_ttl_minutes' => (int) env('WORKOUT_MEMORY_OAUTH_CODE_TTL_MINUTES', 10),
         'access_token_ttl_minutes' => (int) env('WORKOUT_MEMORY_OAUTH_ACCESS_TOKEN_TTL_MINUTES', 1440),
+        'refresh_token_ttl_days' => (int) env('WORKOUT_MEMORY_OAUTH_REFRESH_TOKEN_TTL_DAYS', 30),
         'client_ttl_days' => (int) env('WORKOUT_MEMORY_OAUTH_CLIENT_TTL_DAYS', 30),
+        'approval_ttl_days' => (int) env('WORKOUT_MEMORY_OAUTH_APPROVAL_TTL_DAYS', 365),
     ],
 ];

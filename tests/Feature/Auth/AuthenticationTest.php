@@ -61,9 +61,20 @@ class AuthenticationTest extends TestCase
         $this->assertAuthenticated();
     }
 
-    public function test_registration_closes_after_an_account_exists_by_default(): void
+    public function test_registration_stays_open_after_an_account_exists_by_default(): void
     {
         User::factory()->create();
+
+        $this->get('/register')
+            ->assertOk()
+            ->assertSee('Create account');
+    }
+
+    public function test_registration_can_be_closed_via_config(): void
+    {
+        User::factory()->create();
+
+        config(['workout_memory.registration.enabled' => false]);
 
         $this->get('/register')
             ->assertRedirect(route('login'))
@@ -122,9 +133,9 @@ class AuthenticationTest extends TestCase
 
         config()->set('workout_memory.oauth.public_url', 'https://public-workout.example');
 
-        $this->bootUrlProviderFor('http://127.0.0.1:8000/');
+        $this->bootUrlProviderFor('http://127.0.0.1:8000/dashboard');
 
-        $this->get('http://127.0.0.1:8000/')
+        $this->get('http://127.0.0.1:8000/dashboard')
             ->assertOk()
             ->assertSee('href="http://127.0.0.1:8000/exercises"', false)
             ->assertSee('href="http://127.0.0.1:8000/workouts"', false)
@@ -145,7 +156,7 @@ class AuthenticationTest extends TestCase
     {
         User::factory()->create();
 
-        $this->get('/')->assertRedirect(route('login'));
+        $this->get('/dashboard')->assertRedirect(route('login'));
         $this->get('/exercises')->assertRedirect(route('login'));
         $this->get('/workouts')->assertRedirect(route('login'));
     }

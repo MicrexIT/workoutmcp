@@ -1541,7 +1541,7 @@ SQL);
     {
         $this->actingAs(app(CurrentUserResolver::class)->user());
 
-        $this->get('/')->assertOk()->assertSee('Workout Memory MCP');
+        $this->get('/dashboard')->assertOk()->assertSee('Workout Memory MCP');
         $this->get('/exercises')->assertOk()->assertSee('Weighted Ring Muscle-Up');
         $this->get('/workouts')->assertOk();
     }

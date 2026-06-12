@@ -6,4 +6,41 @@
 @theme {
     --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
+    --font-display: 'Anton', 'Arial Narrow', ui-sans-serif, sans-serif;
+    --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+    --color-ink: oklch(17.5% 0.007 95);
+    --color-ink-raised: oklch(21.5% 0.009 95);
+    --color-chalk: oklch(94.5% 0.013 98);
+    --color-chalk-dim: oklch(67% 0.016 98);
+    --color-volt: oklch(91% 0.214 124);
+    --color-volt-hot: oklch(95% 0.225 124);
+
+    --animate-marquee: marquee 36s linear infinite;
+    --animate-rise: rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+    --animate-blink: blink 1.1s steps(2, start) infinite;
+
+    @keyframes marquee {
+        to {
+            transform: translateX(-50%);
+        }
+    }
+
+    @keyframes rise {
+        from {
+            opacity: 0;
+            transform: translateY(16px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    @keyframes blink {
+        50% {
+            opacity: 0;
+        }
+    }
 }

@@ -67,7 +67,16 @@ class LogWorkoutTool extends Tool
             'exercises.*.raw_phrase.required_without' => 'Each exercise entry needs a raw_phrase (the user\'s wording) or an exercise_id.',
         ]);
 
-        return $this->structured($logger->log($this->currentUser($users), $validated), 'Workout log handled.');
+        $result = $logger->log($this->currentUser($users), $validated);
+
+        if (($result['refused'] ?? true) === false) {
+            $result['sharing'] = [
+                'share_available' => true,
+                'hint' => 'If the user might want to share this workout (a new best, a milestone), offer a public share link; call share_workout only when they say yes.',
+            ];
+        }
+
+        return $this->structured($result, 'Workout log handled.');
     }
 
     public function schema(JsonSchema $schema): array

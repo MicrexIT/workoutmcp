@@ -1,67 +1,46 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="scheme-dark">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{{ $title ?? 'Workout Memory MCP' }}</title>
-    <style>
-        :root { color-scheme: light; font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-        body { margin: 0; background: #f6f7f9; color: #15171a; }
-        header { background: #ffffff; border-bottom: 1px solid #dfe3e8; }
-        nav, main { max-width: 1120px; margin: 0 auto; padding: 18px 20px; }
-        nav { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
-        nav > div { align-items: center; display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
-        nav a { color: #1f5eff; text-decoration: none; font-weight: 650; }
-        .brand { color: #15171a; font-weight: 800; }
-        h1 { margin: 0 0 14px; font-size: 28px; line-height: 1.15; }
-        h2 { margin-top: 28px; font-size: 18px; }
-        .panel { background: #ffffff; border: 1px solid #dfe3e8; border-radius: 8px; padding: 18px; margin: 16px 0; }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
-        .metric { background: #ffffff; border: 1px solid #dfe3e8; border-radius: 8px; padding: 16px; }
-        .metric strong { display: block; font-size: 26px; }
-        table { width: 100%; border-collapse: collapse; background: #ffffff; border: 1px solid #dfe3e8; border-radius: 8px; overflow: hidden; }
-        th, td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #edf0f3; vertical-align: top; }
-        th { background: #f0f2f5; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
-        button { border: 1px solid #cfd6df; border-radius: 6px; background: #ffffff; color: #15171a; cursor: pointer; font: inherit; font-weight: 650; padding: 7px 10px; }
-        button:hover { background: #f6f7f9; }
-        .danger-button { border-color: #f0b4b4; color: #b42318; }
-        .danger-button:hover { background: #fff1f1; }
-        code { background: #eef1f5; border-radius: 5px; padding: 2px 5px; }
-        .alert { border: 1px solid #bbd7b7; background: #f0faef; border-radius: 8px; color: #245b22; margin-bottom: 16px; padding: 12px 14px; }
-        .alert-error { border-color: #f0b4b4; background: #fff1f1; color: #b42318; }
-        .inline-form { display: inline; margin: 0; }
-        .muted { color: #667085; }
-        .nowrap { white-space: nowrap; }
-        .page-heading { align-items: flex-start; display: flex; gap: 16px; justify-content: space-between; margin-bottom: 14px; }
-        .page-heading h1 { margin-bottom: 0; }
-        .text-right { text-align: right; }
-        .logout-button { border: 0; color: #667085; padding: 0; }
-        .logout-button:hover { background: transparent; color: #15171a; }
-    </style>
+    <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}">
+    <meta name="theme-color" content="#191813">
+    {{ \Illuminate\Support\Facades\Vite::fonts() }}
+    @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
-<body>
-    <header>
-        <nav>
-            <a class="brand" href="{{ route('home') }}">Workout Memory MCP</a>
-            <div>
-                <a href="{{ route('exercises.index') }}">Exercises</a>
-                <span class="muted"> · </span>
-                <a href="{{ route('workouts.index') }}">Workouts</a>
-                <span class="muted"> · </span>
-                <span class="muted">{{ auth()->user()->email }}</span>
-                <form method="POST" action="{{ route('logout') }}" class="inline-form">
+<body class="min-h-screen bg-ink font-sans text-chalk antialiased selection:bg-volt selection:text-ink">
+    @include('partials.grain')
+
+    <header class="sticky top-0 z-50 border-b border-chalk/10 bg-ink/90 backdrop-blur">
+        <nav class="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-x-6 gap-y-3 px-5 py-4 sm:px-8">
+            <a href="{{ route('home') }}" class="flex items-center gap-3">
+                <svg viewBox="0 0 32 32" class="h-7 w-7" aria-hidden="true">
+                    <rect width="32" height="32" rx="6" class="fill-volt"/>
+                    <rect x="4" y="14" width="24" height="4" rx="2" class="fill-ink"/>
+                    <rect x="7" y="9" width="4" height="14" rx="1.5" class="fill-ink"/>
+                    <rect x="21" y="9" width="4" height="14" rx="1.5" class="fill-ink"/>
+                </svg>
+                <span class="font-display text-lg uppercase tracking-wide">Workout Memory MCP</span>
+            </a>
+            <div class="flex flex-wrap items-center gap-x-5 gap-y-2 font-mono text-xs uppercase tracking-[0.18em] text-chalk-dim">
+                <a href="{{ route('exercises.index') }}" class="transition hover:text-volt">Exercises</a>
+                <a href="{{ route('workouts.index') }}" class="transition hover:text-volt">Workouts</a>
+                <span class="hidden normal-case tracking-normal sm:inline">{{ auth()->user()->email }}</span>
+                <form method="POST" action="{{ route('logout') }}" class="inline">
                     @csrf
-                    <button type="submit" class="logout-button">Sign out</button>
+                    <button type="submit" class="cursor-pointer uppercase tracking-[0.18em] transition hover:text-volt">Sign out</button>
                 </form>
             </div>
         </nav>
     </header>
-    <main>
+
+    <main class="mx-auto max-w-6xl px-5 py-10 sm:px-8">
         @if (session('status'))
-            <div class="alert">{{ session('status') }}</div>
+            <div class="mb-6 border border-volt/40 bg-volt/10 px-4 py-3 font-mono text-sm">{{ session('status') }}</div>
         @endif
         @if (session('error'))
-            <div class="alert alert-error">{{ session('error') }}</div>
+            <div class="mb-6 border border-red-400/40 bg-red-400/10 px-4 py-3 font-mono text-sm text-red-200">{{ session('error') }}</div>
         @endif
         @yield('content')
     </main>

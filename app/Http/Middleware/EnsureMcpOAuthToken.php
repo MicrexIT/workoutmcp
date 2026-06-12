@@ -2,10 +2,10 @@
 
 namespace App\Http\Middleware;
 
-use App\Services\WorkoutMemory\ChatGptOAuthServer;
+use App\Services\WorkoutMemory\McpOAuthServer;
 use Closure;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Symfony\Component\HttpFoundation\Response;
 
 class EnsureMcpOAuthToken
@@ -17,7 +17,7 @@ class EnsureMcpOAuthToken
      */
     public function handle(Request $request, Closure $next): Response
     {
-        $oauth = app(ChatGptOAuthServer::class);
+        $oauth = app(McpOAuthServer::class);
         $user = $oauth->userForAccessToken($request->bearerToken(), $request->path());
 
         if ($user === null) {
@@ -25,7 +25,7 @@ class EnsureMcpOAuthToken
                 'message' => 'Invalid or missing MCP OAuth bearer token.',
             ], 401)->header(
                 'WWW-Authenticate',
-                'Bearer realm="mcp", resource_metadata="'.$oauth->protectedResourceMetadataUrl($request->path()).'", scope="'.ChatGptOAuthServer::Scope.'"',
+                'Bearer realm="mcp", resource_metadata="'.$oauth->protectedResourceMetadataUrl($request->path()).'", scope="'.McpOAuthServer::Scope.'"',
             );
         }
 

@@ -37,7 +37,16 @@ class FinishWorkoutSessionTool extends Tool
             'source_message_id' => ['sometimes', 'nullable', 'string', 'max:255'],
         ]);
 
-        return $this->structured($sessions->finish($this->currentUser($users), $validated), 'Workout session finish handled.');
+        $result = $sessions->finish($this->currentUser($users), $validated);
+
+        if (($result['refused'] ?? true) === false) {
+            $result['sharing'] = [
+                'share_available' => true,
+                'hint' => 'If the user might want to share this workout (a new best, a milestone), offer a public share link; call share_workout only when they say yes.',
+            ];
+        }
+
+        return $this->structured($result, 'Workout session finish handled.');
     }
 
     public function schema(JsonSchema $schema): array

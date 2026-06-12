@@ -9,12 +9,10 @@ class ExampleTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_guest_is_redirected_to_login(): void
+    public function test_guest_sees_public_landing_page(): void
     {
-        $this->seed();
-
         $response = $this->get('/');
 
-        $response->assertRedirect(route('login'));
+        $response->assertOk()->assertSee('Workout Memory');
     }
 }
