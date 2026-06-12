@@ -60,8 +60,8 @@ class WorkoutUpdater
                     ->whereKey((int) $operation['exercise_id'])
                     ->exists();
 
-                if (! $exists) {
-                    return $this->refused('update_exercise exercise_id does not match any exercise visible to this user.');
+                if (! $exists && ExerciseResolver::normalize((string) ($operation['raw_phrase'] ?? '')) === '') {
+                    return $this->refused('update_exercise exercise_id does not match any exercise visible to this user. Send the user\'s wording as raw_phrase instead and the server will resolve it.');
                 }
             }
 
@@ -189,7 +189,7 @@ class WorkoutUpdater
                 break;
 
             case 'update_exercise':
-                $this->updateExercise($user, $session, $operation);
+                $outcome = $this->updateExercise($user, $session, $operation);
                 break;
 
             case 'merge_workout':
@@ -258,14 +258,16 @@ class WorkoutUpdater
     }
 
     /**
-     * Edit an entry's annotations, and optionally remap it to a different
-     * exercise — the user-facing correction path for misresolved entries.
-     * With remember_phrase=true the corrected mapping is stored as phrase
-     * memory so the same wording resolves right next time.
+     * Edit an entry's annotations, and correct its exercise mapping by
+     * raw_phrase (resolved through the same server-side ladder as logging,
+     * never a silent no-op) or explicit exercise_id. With remember_phrase=true
+     * the corrected mapping is stored as phrase memory so the same wording
+     * resolves right next time.
      *
      * @param  array<string, mixed>  $operation
+     * @return array<string, mixed>|null correction outcome when the exercise mapping was addressed
      */
-    private function updateExercise(User $user, WorkoutSession $session, array $operation): void
+    private function updateExercise(User $user, WorkoutSession $session, array $operation): ?array
     {
         $workoutExercise = $session->exercises()->findOrFail($operation['workout_exercise_id'] ?? null);
         $updates = collect($operation)->only([
@@ -273,31 +275,57 @@ class WorkoutUpdater
             'variant_label',
             'variant_description',
         ])->all();
+        $outcome = null;
 
-        if (isset($operation['exercise_id']) && (int) $operation['exercise_id'] !== (int) $workoutExercise->exercise_id) {
-            /** @var Exercise $exercise */
-            $exercise = Exercise::query()
-                ->where(function (Builder $builder) use ($user): void {
-                    $builder->whereNull('user_id')->orWhere('user_id', $user->id);
-                })
-                ->findOrFail((int) $operation['exercise_id']);
+        $hasCorrection = isset($operation['exercise_id'])
+            || ExerciseResolver::normalize((string) ($operation['raw_phrase'] ?? '')) !== '';
 
-            $updates = [
-                ...$updates,
-                'exercise_id' => $exercise->id,
-                'name_snapshot' => $exercise->name,
-                'tracking_mode_snapshot' => $exercise->tracking_mode,
-                'resolution_type' => 'manual_correction',
+        if ($hasCorrection) {
+            ['exercise' => $exercise, 'outcome' => $outcome] = $this->exerciseWriter->resolveCorrection($user, [
+                ...$operation,
+                'sets' => $workoutExercise->sets
+                    ->map(fn ($set): array => array_filter([
+                        'reps' => $set->reps,
+                        'load_value' => $set->load_kg,
+                        'duration_seconds' => $set->duration_seconds,
+                        'distance_value' => $set->distance_meters,
+                    ], fn (mixed $value): bool => $value !== null))
+                    ->all(),
+            ]);
+
+            $unchanged = (int) $exercise->id === (int) $workoutExercise->exercise_id;
+
+            if (! $unchanged) {
+                $updates = [
+                    ...$updates,
+                    'exercise_id' => $exercise->id,
+                    'name_snapshot' => $exercise->name,
+                    'tracking_mode_snapshot' => $exercise->tracking_mode,
+                    'resolution_type' => 'manual_correction',
+                ];
+            }
+
+            $outcome = [
+                ...$outcome,
+                'corrected_workout_exercise_id' => $workoutExercise->id,
+                'unchanged' => $unchanged,
             ];
 
-            $rawPhrase = trim((string) $workoutExercise->raw_phrase);
+            if ($unchanged) {
+                $outcome['hint'] = 'The correction resolved to the exercise already on the entry. If the user means a different exercise, find it with search_exercises and retry with its exercise_id, or create it with create_exercise first.';
+            }
 
-            if ((bool) ($operation['remember_phrase'] ?? false) && $rawPhrase !== '') {
-                $this->exerciseWriter->upsertPhraseMemory($user, $exercise, $rawPhrase);
+            $rememberPhrase = trim((string) ($operation['raw_phrase'] ?? ''));
+            $rememberPhrase = $rememberPhrase !== '' ? $rememberPhrase : trim((string) $workoutExercise->raw_phrase);
+
+            if ((bool) ($operation['remember_phrase'] ?? false) && $rememberPhrase !== '') {
+                $this->exerciseWriter->upsertPhraseMemory($user, $exercise, $rememberPhrase);
             }
         }
 
         $workoutExercise->update($updates);
+
+        return $outcome;
     }
 
     /**

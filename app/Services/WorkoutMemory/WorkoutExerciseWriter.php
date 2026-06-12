@@ -113,6 +113,24 @@ class WorkoutExerciseWriter
     }
 
     /**
+     * Resolve a correction's target exercise through the same ladder as logging
+     * (hint corroboration, confident phrase resolution, flagged auto-creation as
+     * last resort) without creating a workout entry.
+     *
+     * @param  array<string, mixed>  $exerciseInput
+     * @return array{exercise: Exercise, outcome: array<string, mixed>}
+     */
+    public function resolveCorrection(User $user, array $exerciseInput): array
+    {
+        $resolved = $this->resolveEntry($user, $exerciseInput);
+
+        /** @var Exercise $exercise */
+        $exercise = $resolved['exercise'];
+
+        return ['exercise' => $exercise, 'outcome' => $this->outcome($resolved, $exercise, false)];
+    }
+
+    /**
      * @param  array<string, mixed>  $setInput
      */
     public function createSet(WorkoutExercise $workoutExercise, array $setInput, ?int $setNumber = null): void

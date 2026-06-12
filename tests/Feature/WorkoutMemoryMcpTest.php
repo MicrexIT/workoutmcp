@@ -1270,6 +1270,116 @@ SQL);
         $this->assertSame('Ring Dip', $resolution['exercise']['name']);
     }
 
+    public function test_update_workout_fixes_entry_exercise_by_corrected_phrase(): void
+    {
+        $user = app(CurrentUserResolver::class)->user();
+        $dumbbellIncline = Exercise::query()->where('name', 'Incline Dumbbell Press')->firstOrFail();
+
+        // Production incident 2026-06-12: "incline bench press" logged during a live
+        // session, but the user actually used dumbbells; the correction must remap
+        // the same entry instead of silently no-opping or appending a duplicate.
+        $logged = app(WorkoutLogger::class)->log($user, [
+            'raw_input' => 'Incline bench press 3x5 at 60kg.',
+            'exercises' => [[
+                'raw_phrase' => 'incline bench press',
+                'sets' => array_fill(0, 3, ['reps' => 5, 'load_value' => 60, 'load_unit' => 'kg']),
+            ]],
+        ]);
+        $entry = $logged['saved_session']['exercises'][0];
+        $this->assertNotSame('Incline Dumbbell Press', $entry['name']);
+
+        $fixed = app(WorkoutUpdater::class)->update($user, [
+            'workout_id' => $logged['saved_session']['id'],
+            'reason' => 'User actually used dumbbells.',
+            'operations' => [[
+                'type' => 'update_exercise',
+                'workout_exercise_id' => $entry['id'],
+                'raw_phrase' => 'incline dumbbell press',
+                'remember_phrase' => true,
+            ]],
+        ]);
+
+        $this->assertFalse($fixed['refused']);
+        $this->assertSame(['Incline Dumbbell Press'], collect($fixed['updated_workout']['exercises'])->pluck('name')->all());
+        $this->assertSame($entry['id'], $fixed['resolution_outcomes'][0]['corrected_workout_exercise_id']);
+        $this->assertFalse($fixed['resolution_outcomes'][0]['unchanged']);
+        $this->assertDatabaseHas('workout_exercises', [
+            'id' => $entry['id'],
+            'exercise_id' => $dumbbellIncline->id,
+            'name_snapshot' => 'Incline Dumbbell Press',
+            'resolution_type' => 'manual_correction',
+        ]);
+        $this->assertSame(3, WorkoutSet::query()->where('workout_exercise_id', $entry['id'])->count());
+        $this->assertDatabaseHas('exercise_phrase_memories', [
+            'user_id' => $user->id,
+            'exercise_id' => $dumbbellIncline->id,
+            'normalized_phrase' => ExerciseResolver::normalize('incline dumbbell press'),
+        ]);
+    }
+
+    public function test_update_workout_phrase_correction_auto_creates_unknown_exercise(): void
+    {
+        $user = app(CurrentUserResolver::class)->user();
+        $logged = app(WorkoutLogger::class)->log($user, [
+            'raw_input' => 'leg press 3x10 at 100kg',
+            'exercises' => [[
+                'raw_phrase' => 'leg press',
+                'sets' => array_fill(0, 3, ['reps' => 10, 'load_value' => 100, 'load_unit' => 'kg']),
+            ]],
+        ]);
+        $entry = $logged['saved_session']['exercises'][0];
+
+        $fixed = app(WorkoutUpdater::class)->update($user, [
+            'workout_id' => $logged['saved_session']['id'],
+            'operations' => [[
+                'type' => 'update_exercise',
+                'workout_exercise_id' => $entry['id'],
+                'raw_phrase' => 'zercher yoke carry',
+            ]],
+        ]);
+
+        $this->assertFalse($fixed['refused']);
+        $this->assertSame('Zercher Yoke Carry', $fixed['auto_created_exercises'][0]['exercise']['name']);
+        $this->assertTrue($fixed['auto_created_exercises'][0]['needs_review']);
+        $created = Exercise::query()->where('name', 'Zercher Yoke Carry')->firstOrFail();
+        $this->assertSame('load_reps', $created->tracking_mode);
+        $this->assertDatabaseHas('workout_exercises', [
+            'id' => $entry['id'],
+            'exercise_id' => $created->id,
+            'resolution_type' => 'manual_correction',
+        ]);
+    }
+
+    public function test_update_workout_reports_unchanged_phrase_corrections(): void
+    {
+        $user = app(CurrentUserResolver::class)->user();
+        $logged = app(WorkoutLogger::class)->log($user, [
+            'raw_input' => 'leg press 3x10 at 100kg',
+            'exercises' => [[
+                'raw_phrase' => 'leg press',
+                'sets' => array_fill(0, 3, ['reps' => 10, 'load_value' => 100, 'load_unit' => 'kg']),
+            ]],
+        ]);
+        $entry = $logged['saved_session']['exercises'][0];
+
+        $unchanged = app(WorkoutUpdater::class)->update($user, [
+            'workout_id' => $logged['saved_session']['id'],
+            'operations' => [[
+                'type' => 'update_exercise',
+                'workout_exercise_id' => $entry['id'],
+                'raw_phrase' => 'leg press',
+            ]],
+        ]);
+
+        $this->assertFalse($unchanged['refused']);
+        $this->assertTrue($unchanged['resolution_outcomes'][0]['unchanged']);
+        $this->assertArrayHasKey('hint', $unchanged['resolution_outcomes'][0]);
+        $this->assertDatabaseMissing('workout_exercises', [
+            'id' => $entry['id'],
+            'resolution_type' => 'manual_correction',
+        ]);
+    }
+
     public function test_log_workout_dated_in_the_past_keeps_that_date_and_duration(): void
     {
         $user = app(CurrentUserResolver::class)->user();

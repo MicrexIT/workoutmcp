@@ -15,7 +15,7 @@ use Laravel\Mcp\Server\Tools\Annotations\IsDestructive;
 use Laravel\Mcp\Server\Tools\Annotations\IsIdempotent;
 
 #[Name('update_workout')]
-#[Description('Correct a logged workout with ordered operations: update_session (rename, re-date to when it really happened, notes, effort, bodyweight); add_exercise (same entry shape and server-side resolution as log_workout entries); update_exercise (edit notes/variants, or remap the entry to the right exercise — set remember_phrase=true when the user confirms the wording always means that exercise); add_set / update_set / remove_set; remove_exercise; reopen_session (set a wrongly-completed workout back to in_progress so live appends target it again); merge_workout (absorb another workout that was really the same session into this one, deleting the emptied source). remove_exercise, remove_set, and merge_workout require user_confirmed_destructive_change=true after the user explicitly confirms. Fetch workout_exercise_id / workout_set_id values from get_workout or the logging response first; field-level details are described in the operations schema.')]
+#[Description('Correct a logged workout with ordered operations: update_session (rename, re-date to when it really happened, notes, effort, bodyweight); add_exercise (same entry shape and server-side resolution as log_workout entries); update_exercise (edit notes/variants, or fix a wrong exercise on the entry: send the user\'s corrected wording as raw_phrase — resolved server-side like log entries, flagged auto-create as last resort, never refused — or an explicit exercise_id; set remember_phrase=true when the user confirms the wording always means that exercise; an unchanged correction is reported with a hint); add_set / update_set / remove_set; remove_exercise; reopen_session (set a wrongly-completed workout back to in_progress so live appends target it again); merge_workout (absorb another workout that was really the same session into this one, deleting the emptied source). remove_exercise, remove_set, and merge_workout require user_confirmed_destructive_change=true after the user explicitly confirms. Fetch workout_exercise_id / workout_set_id values from get_workout or the logging response first; field-level details are described in the operations schema.')]
 #[IsIdempotent]
 #[IsDestructive]
 class UpdateWorkoutTool extends Tool
@@ -48,8 +48,8 @@ class UpdateWorkoutTool extends Tool
                 'source_workout_id' => $schema->integer()->nullable()->description('merge_workout: the workout whose exercises are absorbed into this one; the emptied source is then deleted.'),
                 'exercise_id' => $schema->integer()->nullable()->description('add_exercise: optional resolution hint. update_exercise: remap the entry to this exercise.'),
                 'remember_phrase' => $schema->boolean()->default(false)->description('update_exercise remap: also store the entry\'s raw_phrase as phrase memory for the corrected exercise so future logs resolve it directly.'),
-                'raw_phrase' => $schema->string()->nullable()->description('add_exercise: the user\'s wording, resolved server-side exactly like log_workout entries.'),
-                'resolution_id' => $schema->string()->nullable()->description('add_exercise: optional evidence id from resolve_exercise_mentions.'),
+                'raw_phrase' => $schema->string()->nullable()->description('add_exercise: the user\'s wording, resolved server-side exactly like log_workout entries. update_exercise: the corrected wording for the entry, resolved the same way to fix a wrong exercise mapping.'),
+                'resolution_id' => $schema->string()->nullable()->description('add_exercise/update_exercise: optional evidence id from resolve_exercise_mentions.'),
                 'sets' => $schema->array()->items($schema->object([
                     'set_number' => $schema->integer()->nullable(),
                     'reps' => $schema->integer()->nullable(),
