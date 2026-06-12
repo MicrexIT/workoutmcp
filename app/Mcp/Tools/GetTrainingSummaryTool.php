@@ -5,6 +5,7 @@ namespace App\Mcp\Tools;
 use App\Mcp\Tools\Concerns\ResolvesWorkoutUser;
 use App\Services\WorkoutMemory\CurrentUserResolver;
 use App\Services\WorkoutMemory\TrainingSummaryService;
+use App\Services\WorkoutMemory\WorkoutSessionManager;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\ResponseFactory;
@@ -20,7 +21,7 @@ class GetTrainingSummaryTool extends Tool
 {
     use ResolvesWorkoutUser;
 
-    public function handle(Request $request, CurrentUserResolver $users, TrainingSummaryService $summaries): ResponseFactory
+    public function handle(Request $request, CurrentUserResolver $users, TrainingSummaryService $summaries, WorkoutSessionManager $sessions): ResponseFactory
     {
         $validated = $request->validate([
             'since' => ['sometimes', 'nullable', 'string'],
@@ -29,6 +30,7 @@ class GetTrainingSummaryTool extends Tool
         ]);
 
         return $this->structured([
+            'stale_active_session' => $sessions->staleActiveSessionNotice($this->currentUser($users)),
             'training_summary' => $summaries->trainingSummary(
                 $this->currentUser($users),
                 $validated['since'] ?? null,

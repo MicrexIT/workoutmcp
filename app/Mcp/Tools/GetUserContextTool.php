@@ -4,6 +4,7 @@ namespace App\Mcp\Tools;
 
 use App\Mcp\Tools\Concerns\ResolvesWorkoutUser;
 use App\Services\WorkoutMemory\CurrentUserResolver;
+use App\Services\WorkoutMemory\WorkoutSessionManager;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Mcp\ResponseFactory;
 use Laravel\Mcp\Server\Attributes\Description;
@@ -18,12 +19,13 @@ class GetUserContextTool extends Tool
 {
     use ResolvesWorkoutUser;
 
-    public function handle(CurrentUserResolver $users): ResponseFactory
+    public function handle(CurrentUserResolver $users, WorkoutSessionManager $sessions): ResponseFactory
     {
         $user = $this->currentUser($users);
         $profile = $user->profile;
 
         return $this->structured([
+            'stale_active_session' => $sessions->staleActiveSessionNotice($user),
             'user_context' => [
                 'name' => $user->name,
                 'email' => $user->email,

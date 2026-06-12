@@ -73,7 +73,7 @@ class LogWorkoutTool extends Tool
     {
         return [
             'name' => $schema->string()->nullable(),
-            'occurred_at' => $schema->string()->nullable(),
+            'occurred_at' => $schema->string()->nullable()->description('When the workout actually happened (ISO 8601). Send it whenever the user names a time other than now — "yesterday", "this morning", "last Tuesday" — so the workout is dated correctly. Defaults to now.'),
             'timezone' => $schema->string()->nullable(),
             'kind' => $schema->string()->nullable(),
             'idempotency_key' => $schema->string()->nullable(),

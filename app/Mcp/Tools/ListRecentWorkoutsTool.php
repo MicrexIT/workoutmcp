@@ -5,6 +5,7 @@ namespace App\Mcp\Tools;
 use App\Mcp\Tools\Concerns\ResolvesWorkoutUser;
 use App\Services\WorkoutMemory\CurrentUserResolver;
 use App\Services\WorkoutMemory\TrainingSummaryService;
+use App\Services\WorkoutMemory\WorkoutSessionManager;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Mcp\Request;
 use Laravel\Mcp\ResponseFactory;
@@ -14,13 +15,13 @@ use Laravel\Mcp\Server\Tool;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 
 #[Name('list_recent_workouts')]
-#[Description('Return recent completed workout summaries for planning and recall.')]
+#[Description('Return recent completed workout summaries for planning and recall. When stale_active_session is present, recap it to the user and ask whether to finish it.')]
 #[IsReadOnly]
 class ListRecentWorkoutsTool extends Tool
 {
     use ResolvesWorkoutUser;
 
-    public function handle(Request $request, CurrentUserResolver $users, TrainingSummaryService $summaries): ResponseFactory
+    public function handle(Request $request, CurrentUserResolver $users, TrainingSummaryService $summaries, WorkoutSessionManager $sessions): ResponseFactory
     {
         $validated = $request->validate([
             'limit' => ['sometimes', 'integer', 'min:1', 'max:50'],
@@ -29,6 +30,7 @@ class ListRecentWorkoutsTool extends Tool
         ]);
 
         return $this->structured([
+            'stale_active_session' => $sessions->staleActiveSessionNotice($this->currentUser($users)),
             'sessions' => $summaries->recentWorkouts(
                 $this->currentUser($users),
                 $validated['limit'] ?? 10,

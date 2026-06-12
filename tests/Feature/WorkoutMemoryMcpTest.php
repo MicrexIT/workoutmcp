@@ -4,7 +4,9 @@ namespace Tests\Feature;
 
 use App\Mcp\Servers\WorkoutMemoryServer;
 use App\Mcp\Tools\GetCurrentWorkoutSessionTool;
+use App\Mcp\Tools\GetTrainingSummaryTool;
 use App\Mcp\Tools\GetUserContextTool;
+use App\Mcp\Tools\ListRecentWorkoutsTool;
 use App\Mcp\Tools\RememberExercisePhraseTool;
 use App\Mcp\Tools\ResolveExerciseMentionsTool;
 use App\Mcp\Tools\SearchExercisesTool;
@@ -1114,6 +1116,172 @@ SQL);
             collect($finished['session']['exercises'])->pluck('name')->all(),
         );
         $this->assertSame(1, WorkoutSession::query()->count());
+    }
+
+    public function test_read_tools_surface_stale_active_session_notice(): void
+    {
+        $user = app(CurrentUserResolver::class)->user();
+        $manager = app(WorkoutSessionManager::class);
+
+        $started = $manager->start($user, [
+            'name' => 'Open from yesterday',
+            'occurred_at' => now()->subHours(20)->toISOString(),
+            'idempotency_key' => 'notice-start',
+        ]);
+        $sessionId = $started['active_session']['id'];
+
+        foreach ([GetUserContextTool::class, ListRecentWorkoutsTool::class, GetTrainingSummaryTool::class] as $tool) {
+            WorkoutMemoryServer::tool($tool)->assertStructuredContent(fn (AssertableJson $json) => $json
+                ->where('stale_active_session.session.id', $sessionId)
+                ->has('stale_active_session.hours_since_last_activity')
+                ->has('stale_active_session.prompt_user')
+                ->etc());
+        }
+
+        $manager->finish($user, ['idempotency_key' => 'notice-finish']);
+
+        WorkoutMemoryServer::tool(GetUserContextTool::class)->assertStructuredContent(fn (AssertableJson $json) => $json
+            ->where('stale_active_session', null)
+            ->etc());
+    }
+
+    public function test_update_workout_merges_wrongly_separate_workout(): void
+    {
+        $user = app(CurrentUserResolver::class)->user();
+        $updater = app(WorkoutUpdater::class);
+
+        $first = app(WorkoutLogger::class)->log($user, [
+            'occurred_at' => now()->subHours(3)->toISOString(),
+            'raw_input' => 'leg press 3x10 at 100kg',
+            'exercises' => [[
+                'raw_phrase' => 'leg press',
+                'sets' => array_fill(0, 3, ['reps' => 10, 'load_value' => 100, 'load_unit' => 'kg']),
+            ]],
+        ]);
+
+        $second = app(WorkoutLogger::class)->log($user, [
+            'occurred_at' => now()->subHours(2)->toISOString(),
+            'raw_input' => 'weighted pistol squats 3x3 at 10kg',
+            'exercises' => [[
+                'raw_phrase' => 'weighted pistol squats',
+                'sets' => array_fill(0, 3, ['reps' => 3, 'load_value' => 10, 'load_unit' => 'kg']),
+            ]],
+        ]);
+
+        $unconfirmed = $updater->update($user, [
+            'workout_id' => $first['saved_session']['id'],
+            'operations' => [['type' => 'merge_workout', 'source_workout_id' => $second['saved_session']['id']]],
+        ]);
+
+        $this->assertTrue($unconfirmed['refused']);
+
+        $merged = $updater->update($user, [
+            'workout_id' => $first['saved_session']['id'],
+            'user_confirmed_destructive_change' => true,
+            'reason' => 'Second log was the same session.',
+            'operations' => [['type' => 'merge_workout', 'source_workout_id' => $second['saved_session']['id']]],
+        ]);
+
+        $this->assertFalse($merged['refused']);
+        $this->assertSame(
+            ['Leg Press', 'Weighted Pistol Squat'],
+            collect($merged['updated_workout']['exercises'])->pluck('name')->all(),
+        );
+
+        $target = WorkoutSession::query()->findOrFail($first['saved_session']['id']);
+        $source = WorkoutSession::withTrashed()->findOrFail($second['saved_session']['id']);
+        $this->assertTrue($target->completed_at->gt($target->started_at));
+        $this->assertSame('deleted', $source->status);
+        $this->assertNotNull($source->deleted_at);
+        $this->assertSame(0, $source->exercises()->count());
+        $this->assertDatabaseHas('workout_change_events', [
+            'workout_session_id' => $source->id,
+            'event_type' => 'merged',
+        ]);
+
+        $selfMerge = $updater->update($user, [
+            'workout_id' => $target->id,
+            'user_confirmed_destructive_change' => true,
+            'operations' => [['type' => 'merge_workout', 'source_workout_id' => $target->id]],
+        ]);
+
+        $this->assertTrue($selfMerge['refused']);
+    }
+
+    public function test_update_workout_remaps_exercise_and_optionally_remembers_phrase(): void
+    {
+        $user = app(CurrentUserResolver::class)->user();
+        $plank = Exercise::query()->where('name', 'Plank')->firstOrFail();
+        $ringDip = Exercise::query()->where('name', 'Ring Dip')->firstOrFail();
+        $updater = app(WorkoutUpdater::class);
+
+        $logged = app(WorkoutLogger::class)->log($user, [
+            'raw_input' => 'usual evening finisher 3 minutes',
+            'exercises' => [[
+                'exercise_id' => $plank->id,
+                'raw_phrase' => 'usual evening finisher',
+                'sets' => [['duration_seconds' => 180]],
+            ]],
+        ]);
+        $workoutExerciseId = $logged['saved_session']['exercises'][0]['id'];
+
+        $unknownExercise = $updater->update($user, [
+            'workout_id' => $logged['saved_session']['id'],
+            'operations' => [[
+                'type' => 'update_exercise',
+                'workout_exercise_id' => $workoutExerciseId,
+                'exercise_id' => 99999,
+            ]],
+        ]);
+
+        $this->assertTrue($unknownExercise['refused']);
+
+        $remapped = $updater->update($user, [
+            'workout_id' => $logged['saved_session']['id'],
+            'reason' => 'User says the finisher is ring dips.',
+            'operations' => [[
+                'type' => 'update_exercise',
+                'workout_exercise_id' => $workoutExerciseId,
+                'exercise_id' => $ringDip->id,
+                'remember_phrase' => true,
+            ]],
+        ]);
+
+        $this->assertFalse($remapped['refused']);
+        $this->assertSame(['Ring Dip'], collect($remapped['updated_workout']['exercises'])->pluck('name')->all());
+        $this->assertDatabaseHas('workout_exercises', [
+            'id' => $workoutExerciseId,
+            'exercise_id' => $ringDip->id,
+            'name_snapshot' => 'Ring Dip',
+            'tracking_mode_snapshot' => $ringDip->tracking_mode,
+            'resolution_type' => 'manual_correction',
+        ]);
+        $this->assertDatabaseHas('exercise_phrase_memories', [
+            'user_id' => $user->id,
+            'exercise_id' => $ringDip->id,
+            'normalized_phrase' => ExerciseResolver::normalize('usual evening finisher'),
+        ]);
+
+        $resolution = app(ExerciseResolver::class)->resolveMentions($user, [
+            ['raw_phrase' => 'usual evening finisher'],
+        ])[0];
+        $this->assertSame('phrase_memory', $resolution['resolution']);
+        $this->assertSame('Ring Dip', $resolution['exercise']['name']);
+    }
+
+    public function test_log_workout_dated_in_the_past_keeps_that_date(): void
+    {
+        $user = app(CurrentUserResolver::class)->user();
+
+        $logged = app(WorkoutLogger::class)->log($user, [
+            'occurred_at' => now()->subDay()->setTime(18, 30)->toISOString(),
+            'raw_input' => 'Yesterday evening: ring dips 3x8.',
+            'exercises' => [['raw_phrase' => 'ring dips', 'sets' => array_fill(0, 3, ['reps' => 8])]],
+        ]);
+
+        $this->assertFalse($logged['refused']);
+        $session = WorkoutSession::query()->findOrFail($logged['saved_session']['id']);
+        $this->assertSame(now()->subDay()->toDateString(), $session->started_at->toDateString());
     }
 
     public function test_reopen_session_refuses_while_another_session_is_active(): void

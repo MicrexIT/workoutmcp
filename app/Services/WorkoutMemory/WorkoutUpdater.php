@@ -2,6 +2,7 @@
 
 namespace App\Services\WorkoutMemory;
 
+use App\Models\Exercise;
 use App\Models\User;
 use App\Models\WorkoutSession;
 use Illuminate\Database\Eloquent\Builder;
@@ -33,8 +34,35 @@ class WorkoutUpdater
         foreach ($operations as $operation) {
             $type = (string) ($operation['type'] ?? '');
 
-            if (in_array($type, ['remove_exercise', 'remove_set'], true) && ! $confirmedDestructive) {
-                return $this->refused('Removing exercises or sets requires user_confirmed_destructive_change=true.');
+            if (in_array($type, ['remove_exercise', 'remove_set', 'merge_workout'], true) && ! $confirmedDestructive) {
+                return $this->refused('Removing exercises or sets, or merging another workout away, requires user_confirmed_destructive_change=true.');
+            }
+
+            if ($type === 'merge_workout') {
+                $sourceId = (int) ($operation['source_workout_id'] ?? 0);
+
+                if ($sourceId === (int) $session->id) {
+                    return $this->refused('A workout cannot be merged into itself.');
+                }
+
+                $source = $this->session($user, $sourceId);
+
+                if ($source === null || $source->status === 'deleted') {
+                    return $this->refused('merge_workout needs a source_workout_id pointing to an existing workout of this user.');
+                }
+            }
+
+            if ($type === 'update_exercise' && isset($operation['exercise_id'])) {
+                $exists = Exercise::query()
+                    ->where(function (Builder $builder) use ($user): void {
+                        $builder->whereNull('user_id')->orWhere('user_id', $user->id);
+                    })
+                    ->whereKey((int) $operation['exercise_id'])
+                    ->exists();
+
+                if (! $exists) {
+                    return $this->refused('update_exercise exercise_id does not match any exercise visible to this user.');
+                }
             }
 
             if ($type === 'add_exercise') {
@@ -161,7 +189,11 @@ class WorkoutUpdater
                 break;
 
             case 'update_exercise':
-                $this->updateExercise($session, $operation);
+                $this->updateExercise($user, $session, $operation);
+                break;
+
+            case 'merge_workout':
+                $this->mergeWorkout($user, $session, $operation);
                 break;
 
             case 'remove_exercise':
@@ -226,16 +258,96 @@ class WorkoutUpdater
     }
 
     /**
+     * Edit an entry's annotations, and optionally remap it to a different
+     * exercise — the user-facing correction path for misresolved entries.
+     * With remember_phrase=true the corrected mapping is stored as phrase
+     * memory so the same wording resolves right next time.
+     *
      * @param  array<string, mixed>  $operation
      */
-    private function updateExercise(WorkoutSession $session, array $operation): void
+    private function updateExercise(User $user, WorkoutSession $session, array $operation): void
     {
         $workoutExercise = $session->exercises()->findOrFail($operation['workout_exercise_id'] ?? null);
-        $workoutExercise->update(collect($operation)->only([
+        $updates = collect($operation)->only([
             'notes',
             'variant_label',
             'variant_description',
-        ])->all());
+        ])->all();
+
+        if (isset($operation['exercise_id']) && (int) $operation['exercise_id'] !== (int) $workoutExercise->exercise_id) {
+            /** @var Exercise $exercise */
+            $exercise = Exercise::query()
+                ->where(function (Builder $builder) use ($user): void {
+                    $builder->whereNull('user_id')->orWhere('user_id', $user->id);
+                })
+                ->findOrFail((int) $operation['exercise_id']);
+
+            $updates = [
+                ...$updates,
+                'exercise_id' => $exercise->id,
+                'name_snapshot' => $exercise->name,
+                'tracking_mode_snapshot' => $exercise->tracking_mode,
+                'resolution_type' => 'manual_correction',
+            ];
+
+            $rawPhrase = trim((string) $workoutExercise->raw_phrase);
+
+            if ((bool) ($operation['remember_phrase'] ?? false) && $rawPhrase !== '') {
+                $this->exerciseWriter->upsertPhraseMemory($user, $exercise, $rawPhrase);
+            }
+        }
+
+        $workoutExercise->update($updates);
+    }
+
+    /**
+     * Absorb another workout's exercises into this one (continuing the sort
+     * order), widen the time span, then soft-delete the emptied source. Used
+     * when one real session was split across two logged workouts.
+     *
+     * @param  array<string, mixed>  $operation
+     */
+    private function mergeWorkout(User $user, WorkoutSession $session, array $operation): void
+    {
+        /** @var WorkoutSession $source */
+        $source = WorkoutSession::query()
+            ->where('user_id', $user->id)
+            ->whereKey((int) ($operation['source_workout_id'] ?? 0))
+            ->lockForUpdate()
+            ->firstOrFail();
+
+        $sortOrder = (int) ($session->exercises()->max('sort_order') ?? 0);
+
+        foreach ($source->exercises()->orderBy('sort_order')->orderBy('id')->get() as $exercise) {
+            $exercise->update([
+                'workout_session_id' => $session->id,
+                'sort_order' => ++$sortOrder,
+            ]);
+        }
+
+        $timing = [];
+
+        if ($source->started_at !== null && ($session->started_at === null || $source->started_at->lt($session->started_at))) {
+            $timing['started_at'] = $source->started_at;
+        }
+
+        if ($session->completed_at !== null && $source->completed_at !== null && $source->completed_at->gt($session->completed_at)) {
+            $timing['completed_at'] = $source->completed_at;
+        }
+
+        if ($timing !== []) {
+            $session->update($timing);
+        }
+
+        $source->changeEvents()->create([
+            'user_id' => $user->id,
+            'event_type' => 'merged',
+            'reason' => $operation['reason'] ?? null,
+            'metadata' => ['merged_into_workout_id' => $session->id],
+            'occurred_at' => now(),
+        ]);
+        $source->update(['status' => 'deleted']);
+        $source->delete();
     }
 
     /**

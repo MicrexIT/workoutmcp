@@ -540,6 +540,30 @@ class WorkoutSessionManager
         return $this->summaries->workout($session->fresh(['exercises.sets', 'exercises.exercise', 'changeEvents']));
     }
 
+    /**
+     * Conversation-opening recap for a stale in-progress session, so the model
+     * can tell the user about it and ask what to do instead of the session
+     * silently auto-completing on the next write. Null when nothing is stale.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function staleActiveSessionNotice(User $user): ?array
+    {
+        $active = $this->activeSession($user);
+
+        if ($active === null || ! $this->isStaleActiveSession($active)) {
+            return null;
+        }
+
+        $lastActivity = $this->lastActivityAt($active);
+
+        return [
+            'session' => $this->summaries->workout($active),
+            'hours_since_last_activity' => $lastActivity === null ? null : (int) $lastActivity->diffInHours(now()),
+            'prompt_user' => 'A workout session is still open from earlier. Briefly recap it (name, when, exercises) and ask the user: mark it completed now (finish_workout_session), keep training it, or leave it — it will auto-complete as of its last activity on the next write.',
+        ];
+    }
+
     private function lastActivityAt(WorkoutSession $session): ?Carbon
     {
         $latestEvent = $session->changeEvents()->max('occurred_at');
