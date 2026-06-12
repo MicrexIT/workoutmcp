@@ -24,6 +24,7 @@ use App\Services\WorkoutMemory\WorkoutLogger;
 use App\Services\WorkoutMemory\WorkoutSessionManager;
 use App\Services\WorkoutMemory\WorkoutUpdater;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\JsonSchema\JsonSchemaTypeFactory;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\Fluent\AssertableJson;
 use Tests\TestCase;
@@ -1269,19 +1270,31 @@ SQL);
         $this->assertSame('Ring Dip', $resolution['exercise']['name']);
     }
 
-    public function test_log_workout_dated_in_the_past_keeps_that_date(): void
+    public function test_log_workout_dated_in_the_past_keeps_that_date_and_duration(): void
     {
         $user = app(CurrentUserResolver::class)->user();
 
         $logged = app(WorkoutLogger::class)->log($user, [
             'occurred_at' => now()->subDay()->setTime(18, 30)->toISOString(),
-            'raw_input' => 'Yesterday evening: ring dips 3x8.',
+            'completed_at' => now()->subDay()->setTime(19, 45)->toISOString(),
+            'raw_input' => 'Yesterday evening: ring dips 3x8, took about 75 minutes.',
             'exercises' => [['raw_phrase' => 'ring dips', 'sets' => array_fill(0, 3, ['reps' => 8])]],
         ]);
 
         $this->assertFalse($logged['refused']);
         $session = WorkoutSession::query()->findOrFail($logged['saved_session']['id']);
         $this->assertSame(now()->subDay()->toDateString(), $session->started_at->toDateString());
+        $this->assertSame(75, (int) $session->started_at->diffInMinutes($session->completed_at));
+    }
+
+    public function test_every_tool_schema_builds(): void
+    {
+        $schema = new JsonSchemaTypeFactory;
+
+        foreach (glob(app_path('Mcp/Tools/*.php')) as $file) {
+            $class = 'App\\Mcp\\Tools\\'.basename($file, '.php');
+            $this->assertIsArray(app($class)->schema($schema), "{$class} schema failed to build");
+        }
     }
 
     public function test_reopen_session_refuses_while_another_session_is_active(): void

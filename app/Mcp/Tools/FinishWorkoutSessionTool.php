@@ -43,7 +43,7 @@ class FinishWorkoutSessionTool extends Tool
     public function schema(JsonSchema $schema): array
     {
         return [
-            'occurred_at' => $schema->string()->nullable(),
+            'occurred_at' => $schema->string()->nullable()->description('When the session actually ended (ISO 8601), e.g. when the user forgot to finish earlier. Defaults to now and becomes completed_at.'),
             'timezone' => $schema->string()->nullable(),
             'name' => $schema->string()->nullable(),
             'kind' => $schema->string()->nullable(),

@@ -55,8 +55,8 @@ class AppendSessionStoryTool extends Tool
             'raw_input' => $schema->string()->nullable(),
             'idempotency_key' => $schema->string()->description('Stable per-story key. Reuse on retry; do not reuse for an exercise append.')->required(),
             'source_message_id' => $schema->string()->nullable(),
-            'user_confirmed_recent_target' => $schema->boolean()->default(false),
-            'user_confirmed_current_session' => $schema->boolean()->default(false),
+            'user_confirmed_recent_target' => $schema->boolean()->default(false)->description('Set true after the user confirms they really mean the older latest-completed workout (after a needs_confirmation refusal).'),
+            'user_confirmed_current_session' => $schema->boolean()->default(false)->description('Set true after the user confirms an old-looking occurred_at belongs to a live session happening now.'),
         ];
     }
 }

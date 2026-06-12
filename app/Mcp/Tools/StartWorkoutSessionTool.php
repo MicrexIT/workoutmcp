@@ -40,7 +40,7 @@ class StartWorkoutSessionTool extends Tool
     {
         return [
             'name' => $schema->string()->nullable(),
-            'occurred_at' => $schema->string()->nullable(),
+            'occurred_at' => $schema->string()->nullable()->description('When the session started (ISO 8601). Defaults to now.'),
             'timezone' => $schema->string()->nullable(),
             'kind' => $schema->string()->nullable(),
             'notes' => $schema->string()->nullable(),

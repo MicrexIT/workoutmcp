@@ -346,7 +346,7 @@ class WorkoutSessionManager
             if ($this->isOldCompletedTarget($session) && ! (bool) ($input['user_confirmed_recent_target'] ?? false)) {
                 return $this->refused('The latest completed workout is not recent enough to update without confirmation.', [
                     'needs_confirmation' => true,
-                    'confirmation_hint' => 'Ask the user whether they mean to update this older completed workout, or use log_workout for a separate past workout.',
+                    'confirmation_hint' => 'Ask the user whether they mean to update this older completed workout; if so, retry with user_confirmed_recent_target=true. Use log_workout instead for a separate past workout.',
                     'latest_completed_session' => $this->summaries->workout($session),
                 ]);
             }
@@ -381,7 +381,7 @@ class WorkoutSessionManager
         if ($occurredAt->lt(now()->subHours(self::ACTIVE_SESSION_STALE_HOURS)) && ! (bool) ($input['user_confirmed_current_session'] ?? false)) {
             return $this->refused('This looks like a past completed workout, not a live session append.', [
                 'suggested_next_tool' => 'log_workout',
-                'confirmation_hint' => 'Use append only for a live session or a just-created recent session. Use log_workout for a completed workout from earlier.',
+                'confirmation_hint' => 'Use log_workout for a completed workout from earlier. If the user confirms this really belongs to a live session happening now, retry with user_confirmed_current_session=true.',
             ]);
         }
 

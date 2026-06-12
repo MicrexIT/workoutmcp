@@ -25,6 +25,7 @@ class LogWorkoutTool extends Tool
         $validated = $request->validate([
             'name' => ['sometimes', 'nullable', 'string', 'max:160'],
             'occurred_at' => ['sometimes', 'nullable', 'string'],
+            'completed_at' => ['sometimes', 'nullable', 'string'],
             'timezone' => ['sometimes', 'nullable', 'string', 'max:80'],
             'kind' => ['sometimes', 'nullable', 'string', 'max:80'],
             'idempotency_key' => ['sometimes', 'nullable', 'string', 'max:255'],
@@ -74,10 +75,11 @@ class LogWorkoutTool extends Tool
         return [
             'name' => $schema->string()->nullable(),
             'occurred_at' => $schema->string()->nullable()->description('When the workout actually happened (ISO 8601). Send it whenever the user names a time other than now — "yesterday", "this morning", "last Tuesday" — so the workout is dated correctly. Defaults to now.'),
+            'completed_at' => $schema->string()->nullable()->description('When the workout ended, if the user gave a duration or end time. Defaults to occurred_at.'),
             'timezone' => $schema->string()->nullable(),
             'kind' => $schema->string()->nullable(),
-            'idempotency_key' => $schema->string()->nullable(),
-            'source_message_id' => $schema->string()->nullable(),
+            'idempotency_key' => $schema->string()->nullable()->description('Stable key such as "<message_id>:log". Reuse on retry so the same message never logs twice.'),
+            'source_message_id' => $schema->string()->nullable()->description('Platform message id; also deduplicates replays.'),
             'raw_input' => $schema->string()->required(),
             'notes' => $schema->string()->nullable(),
             'perceived_effort' => $schema->integer()->nullable()->description('1-10 session effort.'),

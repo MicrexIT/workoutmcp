@@ -70,7 +70,9 @@ class WorkoutLogger
                 'user_id' => $user->id,
                 'name' => $input['name'] ?? 'Logged workout',
                 'started_at' => $startedAt,
-                'completed_at' => $input['completed_at'] ?? $startedAt,
+                'completed_at' => isset($input['completed_at'])
+                    ? Carbon::parse($input['completed_at'], $input['timezone'] ?? null)
+                    : $startedAt,
                 'occurred_timezone' => $input['timezone'] ?? $user->profile?->timezone ?? 'UTC',
                 'status' => 'completed',
                 'kind' => $input['kind'] ?? 'mixed',

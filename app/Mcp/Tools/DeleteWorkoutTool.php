@@ -43,7 +43,7 @@ class DeleteWorkoutTool extends Tool
         return [
             'workout_id' => $schema->integer()->required(),
             'reason' => $schema->string()->nullable(),
-            'user_confirmed' => $schema->boolean()->required(),
+            'user_confirmed' => $schema->boolean()->required()->description('Must be true, and only after the user explicitly confirmed the deletion.'),
         ];
     }
 }
