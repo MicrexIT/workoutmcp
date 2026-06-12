@@ -410,6 +410,89 @@ SQL);
         ]);
     }
 
+    public function test_log_workout_resolves_june_9_swim_and_forearm_session_correctly(): void
+    {
+        // Production incident 2026-06-12 (the June 9 session): with no swimming or
+        // forearm strength work in the catalog, character-level fuzz logged
+        // "swimming" as Indoor Ride (via the alias "spinning", 0.63) and "reverse
+        // forearm curls" as Reverse Nordic Curl (0.75), while model hints pinned
+        // the other forearm phrases to Biceps Curl. The expanded catalog plus
+        // corroboration and contradiction gating must land every phrase on a real
+        // matching exercise and report the contradicting hints as ignored.
+        $user = app(CurrentUserResolver::class)->user();
+        $bicepsCurl = Exercise::query()->where('name', 'Biceps Curl')->firstOrFail();
+
+        $logged = app(WorkoutLogger::class)->log($user, [
+            'name' => 'Swim + Forearms',
+            'raw_input' => 'June 9: swam 20 minutes, forearm curls 3x8 12kg/arm, reverse forearm curls 3x8 8kg/arm, forearm twists 3x15 16kg/arm.',
+            'exercises' => [
+                ['raw_phrase' => 'swimming', 'sets' => [['duration_seconds' => 1200]]],
+                ['raw_phrase' => 'forearm curls', 'exercise_id' => $bicepsCurl->id, 'sets' => array_fill(0, 3, ['reps' => 8, 'load_value' => 12, 'load_unit' => 'kg'])],
+                ['raw_phrase' => 'reverse forearm curls', 'sets' => array_fill(0, 3, ['reps' => 8, 'load_value' => 8, 'load_unit' => 'kg'])],
+                ['raw_phrase' => 'forearm twists', 'exercise_id' => $bicepsCurl->id, 'sets' => array_fill(0, 3, ['reps' => 15, 'load_value' => 16, 'load_unit' => 'kg'])],
+            ],
+        ]);
+
+        $this->assertFalse($logged['refused']);
+        $this->assertSame(
+            ['Swimming', 'Wrist Curl', 'Reverse Wrist Curl', 'Forearm Rotation'],
+            collect($logged['saved_session']['exercises'])->pluck('name')->all(),
+        );
+        $this->assertSame([], $logged['auto_created_exercises']);
+        $this->assertSame(
+            ['Biceps Curl', 'Biceps Curl'],
+            array_column($logged['ignored_exercise_hints'], 'ignored_exercise_name'),
+        );
+    }
+
+    public function test_log_workout_contradicted_hint_without_match_auto_creates_instead_of_keeping_it(): void
+    {
+        // A hint that contradicts the phrase\'s body area or modality must never
+        // be kept as a flagged assumption when the server has nothing confident:
+        // that is how "forearm twists" became Biceps Curl. The phrase resolves on
+        // its own (flagged auto-creation as last resort) and the hint is reported.
+        $user = app(CurrentUserResolver::class)->user();
+        $indoorRide = Exercise::query()->where('name', 'Indoor Ride')->firstOrFail();
+
+        $logged = app(WorkoutLogger::class)->log($user, [
+            'raw_input' => 'aqua jog intervals 20 minutes',
+            'exercises' => [[
+                'raw_phrase' => 'aqua jog intervals',
+                'exercise_id' => $indoorRide->id,
+                'sets' => [['duration_seconds' => 1200]],
+            ]],
+        ]);
+
+        $this->assertFalse($logged['refused']);
+        $this->assertSame('Aqua Jog Intervals', $logged['saved_session']['exercises'][0]['name']);
+        $this->assertSame('Aqua Jog Intervals', $logged['auto_created_exercises'][0]['exercise']['name']);
+        $this->assertSame('Indoor Ride', $logged['ignored_exercise_hints'][0]['ignored_exercise_name']);
+    }
+
+    public function test_resolver_blocks_cross_body_part_and_cross_modality_fuzz(): void
+    {
+        $user = app(CurrentUserResolver::class)->user();
+        $resolver = app(ExerciseResolver::class);
+
+        $reverseNordic = Exercise::query()->where('name', 'Reverse Nordic Curl')->firstOrFail();
+        $indoorRide = Exercise::query()->where('name', 'Indoor Ride')->firstOrFail();
+        $chestToBar = Exercise::query()->where('name', 'Chest-to-Bar Pull-Up')->firstOrFail();
+        $sprint = Exercise::query()->where('name', 'Sprint')->firstOrFail();
+        $deadlift = Exercise::query()->where('name', 'Conventional Deadlift')->firstOrFail();
+
+        $this->assertTrue($resolver->conflictsWithPhrase('reverse forearm curls', $reverseNordic));
+        $this->assertTrue($resolver->conflictsWithPhrase('swimming', $indoorRide));
+        $this->assertFalse($resolver->conflictsWithPhrase('chest to bar pull ups', $chestToBar));
+        $this->assertFalse($resolver->conflictsWithPhrase('bike sprint', $sprint));
+        $this->assertFalse($resolver->conflictsWithPhrase('trap bar deadlift', $deadlift));
+
+        // Character soup alone can no longer cross the assumable bar: "swimming"
+        // vs the alias "spinning" scored 0.63 in production.
+        $indoorRideCandidate = collect($resolver->resolveMentions($user, [['raw_phrase' => 'swimming']])[0]['candidates'])
+            ->first(fn (array $candidate): bool => $candidate['exercise']['name'] === 'Indoor Ride');
+        $this->assertTrue($indoorRideCandidate === null || $indoorRideCandidate['confidence'] < 0.60);
+    }
+
     public function test_log_workout_records_spinning_handstand_and_mobility_with_resolution_evidence(): void
     {
         $user = app(CurrentUserResolver::class)->user();
@@ -613,19 +696,19 @@ SQL);
         $user = app(CurrentUserResolver::class)->user();
 
         $logged = app(WorkoutLogger::class)->log($user, [
-            'raw_input' => 'turkish get ups 3x5 at 16kg',
+            'raw_input' => 'banded ankle teeter 3x5 at 16kg',
             'exercises' => [[
-                'raw_phrase' => 'turkish get ups',
+                'raw_phrase' => 'banded ankle teeter',
                 'sets' => array_fill(0, 3, ['reps' => 5, 'load_value' => 16, 'load_unit' => 'kg']),
             ]],
         ]);
 
         $this->assertFalse($logged['refused']);
         $this->assertSame('auto_created', $logged['resolution_outcomes'][0]['method']);
-        $this->assertSame('Turkish Get Ups', $logged['auto_created_exercises'][0]['exercise']['name']);
+        $this->assertSame('Banded Ankle Teeter', $logged['auto_created_exercises'][0]['exercise']['name']);
         $this->assertTrue($logged['auto_created_exercises'][0]['needs_review']);
 
-        $exercise = Exercise::query()->where('name', 'Turkish Get Ups')->firstOrFail();
+        $exercise = Exercise::query()->where('name', 'Banded Ankle Teeter')->firstOrFail();
         $this->assertSame('chatgpt_auto', $exercise->source);
         $this->assertSame((int) $user->id, (int) $exercise->user_id);
         $this->assertSame('load_reps', $exercise->tracking_mode);
@@ -633,18 +716,18 @@ SQL);
         $this->assertTrue((bool) ($exercise->metadata['needs_review'] ?? false));
         $this->assertDatabaseHas('exercise_aliases', [
             'exercise_id' => $exercise->id,
-            'normalized_alias' => ExerciseResolver::normalize('turkish get ups'),
+            'normalized_alias' => ExerciseResolver::normalize('banded ankle teeter'),
         ]);
         $this->assertDatabaseHas('exercise_phrase_memories', [
             'user_id' => $user->id,
             'exercise_id' => $exercise->id,
-            'normalized_phrase' => ExerciseResolver::normalize('turkish get ups'),
+            'normalized_phrase' => ExerciseResolver::normalize('banded ankle teeter'),
         ]);
 
         $resolution = app(ExerciseResolver::class)->resolveMentions($user, [
-            ['raw_phrase' => 'turkish get ups'],
+            ['raw_phrase' => 'banded ankle teeter'],
         ])[0];
-        $this->assertSame('Turkish Get Ups', $resolution['exercise']['name']);
+        $this->assertSame('Banded Ankle Teeter', $resolution['exercise']['name']);
     }
 
     public function test_log_workout_dedupes_repeated_unknown_phrase_within_request(): void
@@ -652,18 +735,18 @@ SQL);
         $user = app(CurrentUserResolver::class)->user();
 
         $logged = app(WorkoutLogger::class)->log($user, [
-            'raw_input' => 'pogo hops 2x20 per side',
+            'raw_input' => 'teeter taps 2x20 per side',
             'exercises' => [
-                ['raw_phrase' => 'pogo hops', 'notes' => 'left side', 'sets' => [['reps' => 20]]],
-                ['raw_phrase' => 'pogo hops', 'notes' => 'right side', 'sets' => [['reps' => 20]]],
+                ['raw_phrase' => 'teeter taps', 'notes' => 'left side', 'sets' => [['reps' => 20]]],
+                ['raw_phrase' => 'teeter taps', 'notes' => 'right side', 'sets' => [['reps' => 20]]],
             ],
         ]);
 
         $this->assertFalse($logged['refused']);
-        $this->assertSame(1, Exercise::query()->where('name', 'Pogo Hops')->count());
+        $this->assertSame(1, Exercise::query()->where('name', 'Teeter Taps')->count());
         $this->assertCount(1, $logged['auto_created_exercises']);
         $this->assertSame(['auto_created', 'phrase_memory'], array_column($logged['resolution_outcomes'], 'method'));
-        $this->assertSame(2, WorkoutExercise::query()->where('name_snapshot', 'Pogo Hops')->count());
+        $this->assertSame(2, WorkoutExercise::query()->where('name_snapshot', 'Teeter Taps')->count());
     }
 
     public function test_remember_exercise_phrase_round_trip(): void
@@ -774,7 +857,7 @@ SQL);
                 ],
                 [
                     'type' => 'add_exercise',
-                    'raw_phrase' => 'turkish get up',
+                    'raw_phrase' => 'zercher yoke carry',
                     'sets' => [['reps' => 5, 'load_value' => 16, 'load_unit' => 'kg']],
                 ],
             ],
@@ -782,9 +865,9 @@ SQL);
 
         $this->assertFalse($updated['refused']);
         $this->assertSame(['resolved', 'auto_created'], array_column($updated['resolution_outcomes'], 'method'));
-        $this->assertSame('Turkish Get Up', $updated['auto_created_exercises'][0]['exercise']['name']);
+        $this->assertSame('Zercher Yoke Carry', $updated['auto_created_exercises'][0]['exercise']['name']);
         $this->assertSame(
-            ['Ring Dip', 'Leg Press', 'Turkish Get Up'],
+            ['Ring Dip', 'Leg Press', 'Zercher Yoke Carry'],
             collect($updated['updated_workout']['exercises'])->pluck('name')->all(),
         );
     }
@@ -1632,7 +1715,7 @@ SQL);
         $this->actingAs(app(CurrentUserResolver::class)->user());
 
         $this->get('/dashboard')->assertOk()->assertSee('Workout Memory MCP');
-        $this->get('/exercises')->assertOk()->assertSee('Weighted Ring Muscle-Up');
+        $this->get('/exercises')->assertOk()->assertSee('Dead Hang');
         $this->get('/workouts')->assertOk();
     }
 }

@@ -290,7 +290,7 @@ class WorkoutExerciseWriter
         }
 
         if ($providedExercise !== null) {
-            return $this->resolveProvidedExercise($user, $providedExercise, $rawPhrase, $attempt, $trustProvidedExercise);
+            return $this->resolveProvidedExercise($user, $providedExercise, $rawPhrase, $attempt, $exerciseInput, $trustProvidedExercise);
         }
 
         return $this->resolvePhrase($user, $rawPhrase, $exerciseInput);
@@ -397,10 +397,14 @@ class WorkoutExerciseWriter
      *
      * In a correction ($trusted) the id is not a hint but the operation's intent, so
      * it always wins; a disagreeing phrase resolution is reported alongside instead.
+     * An untrusted hint that contradicts the phrase's body area or modality is never
+     * kept: the phrase resolves on its own (auto-creating if needed) and the hint is
+     * reported as ignored.
      *
+     * @param  array<string, mixed>  $exerciseInput
      * @return array<string, mixed>
      */
-    private function resolveProvidedExercise(User $user, Exercise $exercise, string $rawPhrase, ?ExerciseResolutionAttempt $attempt, bool $trusted = false): array
+    private function resolveProvidedExercise(User $user, Exercise $exercise, string $rawPhrase, ?ExerciseResolutionAttempt $attempt, array $exerciseInput, bool $trusted = false): array
     {
         $base = [
             'exercise' => $exercise,
@@ -491,6 +495,16 @@ class WorkoutExerciseWriter
                     ],
                 ];
             }
+        }
+
+        if ($this->resolver->conflictsWithPhrase($normalized, $exercise)) {
+            return [
+                ...$this->resolvePhrase($user, $rawPhrase, $exerciseInput),
+                'ignored_exercise_hint' => [
+                    'exercise_id' => (int) $exercise->id,
+                    'exercise_name' => $exercise->name,
+                ],
+            ];
         }
 
         return [

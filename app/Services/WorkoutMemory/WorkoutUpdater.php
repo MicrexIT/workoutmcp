@@ -322,7 +322,9 @@ class WorkoutUpdater
             $rememberPhrase = $rememberPhrase !== '' ? $rememberPhrase : trim((string) $workoutExercise->raw_phrase);
 
             if ((bool) ($operation['remember_phrase'] ?? false) && $rememberPhrase !== '') {
-                $this->exerciseWriter->upsertPhraseMemory($user, $exercise, $rememberPhrase);
+                // An explicit correction the user confirmed: store at teach-level
+                // confidence so it outranks catalog aliases on future resolutions.
+                $this->exerciseWriter->upsertPhraseMemory($user, $exercise, $rememberPhrase, confidence: 0.99);
             }
         }
 

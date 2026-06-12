@@ -38,7 +38,7 @@ class DatabaseSeeder extends Seeder
                     'bodyweight' => $exerciseData['bodyweight'],
                     'external_load_allowed' => $exerciseData['external_load_allowed'],
                     'default_variant_policy' => $exerciseData['default_variant_policy'],
-                    'metadata' => ['seed_version' => 'mvp-1'],
+                    'metadata' => $exerciseData['metadata'] ?? ['seed_version' => 'mvp-1'],
                 ],
             );
 

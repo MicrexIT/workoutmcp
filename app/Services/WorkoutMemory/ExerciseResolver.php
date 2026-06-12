@@ -13,6 +13,59 @@ use Throwable;
 
 class ExerciseResolver
 {
+    /**
+     * Body areas a phrase can name unambiguously, mapped to a canonical area.
+     * Deliberately omits ambiguous tokens: "leg" (leg raise targets core),
+     * "trap" (trap bar deadlift), "back" (back squat, back lever).
+     */
+    private const PHRASE_BODY_AREAS = [
+        'forearm' => 'forearms', 'forearms' => 'forearms', 'wrist' => 'forearms', 'wrists' => 'forearms', 'grip' => 'forearms',
+        'bicep' => 'biceps', 'biceps' => 'biceps',
+        'tricep' => 'triceps', 'triceps' => 'triceps',
+        'chest' => 'chest', 'pec' => 'chest', 'pecs' => 'chest',
+        'shoulder' => 'shoulders', 'shoulders' => 'shoulders', 'delt' => 'shoulders', 'delts' => 'shoulders',
+        'lat' => 'back', 'lats' => 'back',
+        'abs' => 'core', 'core' => 'core',
+        'glute' => 'glutes', 'glutes' => 'glutes',
+        'quad' => 'quads', 'quads' => 'quads', 'quadriceps' => 'quads',
+        'hamstring' => 'hamstrings', 'hamstrings' => 'hamstrings',
+        'calf' => 'calves', 'calves' => 'calves',
+    ];
+
+    /**
+     * Catalog muscle / body-area vocabulary mapped to the same canonical areas.
+     * Values not listed here (skill, cardio, full body, posterior chain, ...)
+     * carry no contradiction signal and are ignored.
+     */
+    private const EXERCISE_BODY_AREAS = [
+        'forearms' => 'forearms', 'wrists' => 'forearms', 'grip' => 'forearms',
+        'biceps' => 'biceps',
+        'triceps' => 'triceps',
+        'chest' => 'chest', 'upper chest' => 'chest',
+        'shoulders' => 'shoulders', 'rear delts' => 'shoulders', 'side delts' => 'shoulders',
+        'lats' => 'back', 'upper back' => 'back',
+        'core' => 'core', 'obliques' => 'core',
+        'glutes' => 'glutes',
+        'quads' => 'quads',
+        'hamstrings' => 'hamstrings',
+        'calves' => 'calves',
+    ];
+
+    /**
+     * Cardio modality tokens. "sprint", "row", and "erg" are deliberately absent:
+     * users sprint on bikes, row barbells, and erg on three machines.
+     */
+    private const MODALITY_TOKENS = [
+        'swim' => 'swim', 'swimming' => 'swim', 'swam' => 'swim',
+        'run' => 'run', 'running' => 'run', 'jog' => 'run', 'jogging' => 'run',
+        'bike' => 'bike', 'biking' => 'bike', 'cycle' => 'bike', 'cycling' => 'bike',
+        'spin' => 'bike', 'spinning' => 'bike', 'ride' => 'bike', 'riding' => 'bike',
+        'ski' => 'ski', 'skiing' => 'ski',
+        'walk' => 'walk', 'walking' => 'walk', 'hike' => 'walk', 'hiking' => 'walk',
+        'elliptical' => 'elliptical',
+        'stair' => 'stairs', 'stairs' => 'stairs', 'stairmaster' => 'stairs',
+    ];
+
     public function __construct(private readonly ExerciseSerializer $serializer) {}
 
     /**
@@ -144,7 +197,12 @@ class ExerciseResolver
         $memoryCandidate = null;
 
         if ($memory?->exercise !== null) {
-            $memoryCandidate = $this->candidate($memory->exercise, 'phrase_memory', 0.97, 'User phrase memory matched this wording.', $user);
+            // Explicit teachings (remember_exercise_phrase / remember_phrase
+            // corrections, stored at 0.99) outrank exact catalog aliases (0.98);
+            // incidental memories written while logging stay below them so a
+            // polluted row cannot hijack curated vocabulary.
+            $memoryConfidence = (float) $memory->confidence >= 0.99 ? 0.99 : 0.97;
+            $memoryCandidate = $this->candidate($memory->exercise, 'phrase_memory', $memoryConfidence, 'User phrase memory matched this wording.', $user);
             $candidates = collect([$memoryCandidate, ...$candidates])
                 ->unique(fn (array $candidate): int => (int) $candidate['exercise']['id'])
                 ->sortByDesc('confidence')
@@ -304,6 +362,11 @@ class ExerciseResolver
 
                 $score = min(1.0, max(0.0, round($score, 2)));
 
+                if ($resolution === 'variant' && $score >= 0.60 && $this->conflictsWithPhrase($normalized, $exercise)) {
+                    $score = 0.45;
+                    $reason = 'Name similarity only — the phrase names a different body area or cardio modality.';
+                }
+
                 if ($score < 0.35 && $normalized !== '') {
                     return null;
                 }
@@ -325,8 +388,22 @@ class ExerciseResolver
             return 1.0;
         }
 
-        if (str_contains($candidate, $needle) || str_contains($needle, $candidate)) {
+        if (str_contains($needle, $candidate)) {
             return 0.86;
+        }
+
+        if (str_contains($candidate, $needle)) {
+            // The phrase is a fragment of a longer exercise name. Near-complete
+            // coverage is as good as equality; a short fragment ("pushups" inside
+            // "Plyo Kettlebell Pushups") is real but ambiguous evidence and must
+            // not outrank an exact alias or a fuller match.
+            $coverage = strlen($needle) / max(1, strlen($candidate));
+
+            return match (true) {
+                $coverage >= 0.75 => 0.86,
+                $coverage >= 0.45 => 0.74,
+                default => 0.66,
+            };
         }
 
         $needleTokens = collect(explode(' ', $needle))->filter()->values();
@@ -336,8 +413,102 @@ class ExerciseResolver
         $tokenScore = $intersection / $union;
 
         similar_text($needle, $candidate, $similarity);
+        $charScore = $similarity / 100;
 
-        return round(max($tokenScore, $similarity / 100), 2);
+        if ($charScore >= 0.60 && $charScore > $tokenScore && ! $this->sharesWordEvidence($needleTokens, $candidateTokens, $needle, $candidate)) {
+            $charScore = 0.59;
+        }
+
+        return round(max($tokenScore, $charScore), 2);
+    }
+
+    /**
+     * Character-level similarity alone must never carry a match into the
+     * assumable (>= 0.60) band: "swimming" vs the alias "spinning" share enough
+     * letters for 0.63 while having nothing to do with each other. High char
+     * scores stand only with word-level corroboration: a shared token (plurals
+     * stripped), one string containing the other once spaces are removed
+     * ("pushups" vs "push up"), a typo-distance of <= 2 edits, or a shared
+     * token prefix of >= 4 letters ("stairmaster" vs "stair climber").
+     *
+     * @param  Collection<int, string>  $needleTokens
+     * @param  Collection<int, string>  $candidateTokens
+     */
+    private function sharesWordEvidence(Collection $needleTokens, Collection $candidateTokens, string $needle, string $candidate): bool
+    {
+        $stem = fn (string $token): string => strlen($token) > 3 ? rtrim($token, 's') : $token;
+        $stemmedNeedle = $needleTokens->map($stem);
+        $stemmedCandidate = $candidateTokens->map($stem);
+
+        // Shared words shorter than 4 letters ("ups", "the") are too generic
+        // to vouch for a phrase: "turkish get ups" must not corroborate the
+        // alias "push ups" through "ups" alone.
+        $sharedTokens = $stemmedNeedle->intersect($stemmedCandidate)
+            ->filter(fn (string $token): bool => strlen($token) >= 4);
+
+        if ($sharedTokens->isNotEmpty()) {
+            return true;
+        }
+
+        $squashedNeedle = str_replace(' ', '', $needle);
+        $squashedCandidate = str_replace(' ', '', $candidate);
+
+        if (str_contains($squashedCandidate, $squashedNeedle) || str_contains($squashedNeedle, $squashedCandidate)) {
+            return true;
+        }
+
+        if (strlen($squashedNeedle) < 50 && strlen($squashedCandidate) < 50 && levenshtein($squashedNeedle, $squashedCandidate) <= 2) {
+            return true;
+        }
+
+        return $needleTokens->contains(
+            fn (string $needleToken): bool => strlen($needleToken) >= 4 && $candidateTokens->contains(
+                fn (string $candidateToken): bool => strncmp($needleToken, $candidateToken, 4) === 0,
+            ),
+        );
+    }
+
+    /**
+     * True when the phrase names a body area or cardio modality that the
+     * exercise contradicts — e.g. "reverse forearm curls" vs Reverse Nordic
+     * Curl (quads), or "swimming" vs Indoor Ride (bike). Tokens that appear in
+     * the exercise's own name or aliases never contradict it (chest-to-bar
+     * pull-ups stay matchable to Chest-to-Bar Pull-Up), and exercises without
+     * a mapped body area or modality carry no contradiction signal.
+     */
+    public function conflictsWithPhrase(string $normalizedPhrase, Exercise $exercise): bool
+    {
+        $phraseTokens = collect(explode(' ', $normalizedPhrase))->filter()->unique()->values();
+
+        if ($phraseTokens->isEmpty()) {
+            return false;
+        }
+
+        $exercise->loadMissing('aliases');
+        $exerciseTokens = collect([self::normalize($exercise->name), ...$exercise->aliases->map(fn ($alias): string => (string) $alias->normalized_alias)->all()])
+            ->flatMap(fn (string $text): array => explode(' ', $text))
+            ->filter()
+            ->unique();
+
+        $unexplainedTokens = $phraseTokens->reject(fn (string $token): bool => $exerciseTokens->contains($token));
+
+        $phraseAreas = $phraseTokens->map(fn (string $token): ?string => self::PHRASE_BODY_AREAS[$token] ?? null)->filter()->unique();
+        $unexplainedAreas = $unexplainedTokens->map(fn (string $token): ?string => self::PHRASE_BODY_AREAS[$token] ?? null)->filter()->unique();
+        $exerciseAreas = collect([(string) $exercise->primary_body_area, ...($exercise->primary_muscles ?? [])])
+            ->map(fn (string $value): ?string => self::EXERCISE_BODY_AREAS[self::normalize($value)] ?? null)
+            ->filter()
+            ->unique();
+
+        if ($unexplainedAreas->isNotEmpty() && $exerciseAreas->isNotEmpty() && $phraseAreas->intersect($exerciseAreas)->isEmpty()) {
+            return true;
+        }
+
+        $phraseModalities = $phraseTokens->map(fn (string $token): ?string => self::MODALITY_TOKENS[$token] ?? null)->filter()->unique();
+        $exerciseModalities = $exerciseTokens->map(fn (string $token): ?string => self::MODALITY_TOKENS[$token] ?? null)->filter()->unique();
+
+        return $phraseModalities->isNotEmpty()
+            && $exerciseModalities->isNotEmpty()
+            && $phraseModalities->intersect($exerciseModalities)->isEmpty();
     }
 
     private function looksWeighted(string $rawPhrase): bool

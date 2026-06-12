@@ -9,6 +9,20 @@ class ExerciseCatalogSeederData
      */
     public function exercises(): array
     {
+        $curated = $this->curated();
+
+        return [...$curated, ...$this->importedCatalog($curated)];
+    }
+
+    /**
+     * Hand-curated catalog only, without the bulk import. The import command
+     * dedupes the dataset against this list (never against exercises(), which
+     * would dedupe a regenerated import against its own previous output).
+     *
+     * @return list<array<string, mixed>>
+     */
+    public function curated(): array
+    {
         return [
             ...$this->ringsAndCalisthenics(),
             ...$this->bodyweightStrength(),
@@ -17,6 +31,40 @@ class ExerciseCatalogSeederData
             ...$this->strength(),
             ...$this->conditioning(),
         ];
+    }
+
+    /**
+     * Bulk gym vocabulary imported from free-exercise-db (public domain,
+     * https://github.com/yuhonas/free-exercise-db), pre-transformed to the
+     * seeder shape by scripts/import-free-exercise-db.php. Curated entries
+     * always win: an imported exercise whose name collides with a curated
+     * name or alias (ignoring spacing and a trailing plural "s") is skipped.
+     *
+     * @param  list<array<string, mixed>>  $curated
+     * @return list<array<string, mixed>>
+     */
+    private function importedCatalog(array $curated): array
+    {
+        $path = base_path('database/seeders/data/imported-exercise-catalog.json');
+
+        if (! is_file($path)) {
+            return [];
+        }
+
+        $taken = collect($curated)
+            ->flatMap(fn (array $exercise): array => [$exercise['name'], ...$exercise['aliases']])
+            ->map(fn (string $name): string => self::dedupeKey($name))
+            ->flip();
+
+        return collect(json_decode((string) file_get_contents($path), true) ?: [])
+            ->reject(fn (array $exercise): bool => $taken->has(self::dedupeKey((string) $exercise['name'])))
+            ->values()
+            ->all();
+    }
+
+    public static function dedupeKey(string $name): string
+    {
+        return rtrim(str_replace(' ', '', ExerciseResolver::normalize($name)), 's');
     }
 
     /**
@@ -72,7 +120,7 @@ class ExerciseCatalogSeederData
             $this->exercise('Archer Pull-Up', 'calisthenics', 'reps', ['pull-up bar'], ['lats', 'biceps'], [], 'variant', false, 'Pull-Up'),
             $this->exercise('Scapular Pull-Up', 'calisthenics', 'reps', ['pull-up bar'], ['scapulae', 'lats']),
             $this->exercise('Inverted Row', 'calisthenics', 'reps', ['bar', 'rings'], ['lats', 'rear delts']),
-            $this->exercise('Push-Up', 'calisthenics', 'reps', ['bodyweight'], ['chest', 'triceps']),
+            $this->exercise('Push-Up', 'calisthenics', 'reps', ['bodyweight'], ['chest', 'triceps'], ['pushups', 'push ups']),
             $this->exercise('Weighted Push-Up', 'calisthenics', 'load_reps', ['bodyweight', 'plate'], ['chest', 'triceps'], [], 'variant', true, 'Push-Up'),
             $this->exercise('Pike Push-Up', 'calisthenics', 'reps', ['bodyweight'], ['shoulders', 'triceps']),
             $this->exercise('Elevated Pike Push-Up', 'calisthenics', 'reps', ['box'], ['shoulders', 'triceps'], [], 'variant', false, 'Pike Push-Up'),
@@ -199,17 +247,23 @@ class ExerciseCatalogSeederData
             $this->exercise('Leg Extension', 'strength', 'load_reps', ['machine'], ['quads'], [], 'canonical', true),
             $this->exercise('Leg Curl', 'strength', 'load_reps', ['machine'], ['hamstrings'], [], 'canonical', true),
             $this->exercise('Hip Thrust', 'strength', 'load_reps', ['barbell', 'machine'], ['glutes'], [], 'canonical', true),
-            // Keep the bare token "calves" out of calf-raise aliases: a lone "calves" phrase must
-            // substring-match only the Calf Press on Leg Press aliases so resolution stays deterministic.
+            // A lone "calves" phrase must resolve deterministically to the leg-press calf
+            // press (this catalog's convention), so "calves" is an explicit alias there and
+            // stays out of the calf-raise aliases.
             $this->exercise('Standing Calf Raise', 'strength', 'load_reps', ['machine', 'dumbbells'], ['calves'], ['standing calf raises', 'calf raises', 'calf raise'], 'canonical', true),
             $this->exercise('Seated Calf Raise', 'strength', 'load_reps', ['machine'], ['calves'], ['seated calf raises'], 'canonical', true),
-            $this->exercise('Calf Press on Leg Press', 'strength', 'load_reps', ['machine'], ['calves'], ['calf press', 'calves on leg press', 'leg press calves'], 'canonical', true),
+            $this->exercise('Calf Press on Leg Press', 'strength', 'load_reps', ['machine'], ['calves'], ['calves', 'calf press', 'calves on leg press', 'leg press calves'], 'canonical', true),
             $this->exercise('Biceps Curl', 'strength', 'load_reps', ['dumbbells', 'barbell'], ['biceps'], [], 'canonical', true),
             $this->exercise('Hammer Curl', 'strength', 'load_reps', ['dumbbells'], ['biceps', 'forearms'], [], 'canonical', true),
+            $this->exercise('Wrist Curl', 'strength', 'load_reps', ['dumbbells', 'barbell'], ['forearms'], ['wrist curls', 'forearm curl', 'forearm curls'], 'canonical', true),
+            $this->exercise('Reverse Wrist Curl', 'strength', 'load_reps', ['dumbbells', 'barbell'], ['forearms'], ['reverse wrist curls', 'reverse forearm curl', 'reverse forearm curls', 'wrist extension curls'], 'canonical', true),
+            $this->exercise('Forearm Rotation', 'strength', 'load_reps', ['dumbbells'], ['forearms'], ['forearm twist', 'forearm twists', 'pronation supination', 'forearm pronation and supination', 'wrist twists'], 'canonical', true),
+            $this->exercise('Dead Hang', 'calisthenics', 'hold', ['pull-up bar'], ['forearms', 'lats'], ['bar hang', 'passive hang']),
             $this->exercise('Triceps Pushdown', 'strength', 'load_reps', ['cable'], ['triceps'], [], 'canonical', true),
             $this->exercise('Skull Crusher', 'strength', 'load_reps', ['barbell', 'dumbbells'], ['triceps'], [], 'canonical', true),
             $this->exercise('Goblet Squat', 'strength', 'load_reps', ['kettlebell', 'dumbbell'], ['quads', 'glutes'], [], 'canonical', true),
             $this->exercise('Kettlebell Clean', 'strength', 'load_reps', ['kettlebell'], ['posterior chain', 'shoulders'], [], 'canonical', true),
+            $this->exercise('Turkish Get-Up', 'strength', 'load_reps', ['kettlebell', 'dumbbells'], ['full body', 'shoulders'], ['TGU', 'turkish get up', 'turkish get ups', 'turkish getup'], 'canonical', true),
             $this->exercise('Kettlebell Press', 'strength', 'load_reps', ['kettlebell'], ['shoulders', 'triceps'], [], 'canonical', true),
             $this->exercise('Landmine Press', 'strength', 'load_reps', ['barbell', 'landmine'], ['shoulders', 'chest'], [], 'canonical', true),
             $this->exercise('Cable Fly', 'strength', 'load_reps', ['cable'], ['chest'], [], 'canonical', true),
@@ -249,6 +303,9 @@ class ExerciseCatalogSeederData
             $this->exercise('Treadmill Incline Walk', 'endurance', 'time_distance', ['treadmill'], ['cardio']),
             $this->exercise('Stair Climber', 'conditioning', 'time', ['machine'], ['cardio', 'glutes']),
             $this->exercise('Elliptical', 'endurance', 'time_distance', ['machine'], ['cardio']),
+            $this->exercise('Swimming', 'endurance', 'time_distance', ['pool'], ['cardio'], ['swim', 'swam', 'lap swimming', 'swimming laps', 'freestyle swimming', 'pool swim']),
+            $this->exercise('Hike', 'endurance', 'time_distance', ['bodyweight'], ['cardio'], ['hiking']),
+            $this->exercise('Outdoor Ride', 'endurance', 'time_distance', ['bike'], ['cardio'], ['cycling', 'road bike ride', 'bike ride']),
         ];
     }
 
