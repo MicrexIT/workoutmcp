@@ -56,6 +56,7 @@
         <footer class="flex flex-wrap gap-4 py-8 font-mono text-xs text-chalk-dim">
             <a href="{{ route('docs') }}" class="transition hover:text-volt">Docs</a>
             <a href="{{ route('privacy') }}" class="transition hover:text-volt">Privacy</a>
+            <a href="{{ route('terms') }}" class="transition hover:text-volt">Terms</a>
             <a href="{{ route('landing') }}" class="transition hover:text-volt">Home</a>
         </footer>
     </main>

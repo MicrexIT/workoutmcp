@@ -82,6 +82,13 @@ Route::get('/privacy', function () {
     ]);
 })->name('privacy');
 
+Route::get('/terms', function () {
+    return view('terms', [
+        'companyName' => (string) config('workout_memory.company.name'),
+        'supportEmail' => (string) config('workout_memory.support.email'),
+    ]);
+})->name('terms');
+
 Route::get('/support', function () {
     $publicUrl = rtrim((string) config('workout_memory.oauth.public_url'), '/');
 

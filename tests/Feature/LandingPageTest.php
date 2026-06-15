@@ -23,6 +23,7 @@ class LandingPageTest extends TestCase
             ->assertSee(route('login'), false)
             ->assertSee(route('docs'), false)
             ->assertSee(route('privacy'), false)
+            ->assertSee(route('terms'), false)
             ->assertSee(route('support'), false)
             ->assertSee('Remics Software Technologies - FZCO');
     }
@@ -55,11 +56,25 @@ class LandingPageTest extends TestCase
             ->assertSee('Last updated June 15, 2026')
             ->assertSee($supportEmail, false);
 
+        $this->get('/terms')
+            ->assertOk()
+            ->assertSee('Terms of Service')
+            ->assertSee('Last updated June 15, 2026')
+            ->assertSee($supportEmail, false);
+
         $this->get('/support')
             ->assertOk()
             ->assertSee('Support')
             ->assertSee($mcpUrl, false)
             ->assertSee($supportEmail, false);
+    }
+
+    public function test_demo_video_asset_exists_at_public_path(): void
+    {
+        $path = public_path('demo.mp4');
+
+        $this->assertFileExists($path);
+        $this->assertGreaterThan(0, filesize($path));
     }
 
     public function test_landing_shows_closed_notice_when_registration_is_closed(): void

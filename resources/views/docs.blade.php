@@ -86,6 +86,7 @@
         <footer class="flex flex-col gap-3 py-8 font-mono text-xs text-chalk-dim sm:flex-row sm:items-center sm:justify-between">
             <div class="flex flex-wrap gap-4">
                 <a href="{{ route('privacy') }}" class="transition hover:text-volt">Privacy</a>
+                <a href="{{ route('terms') }}" class="transition hover:text-volt">Terms</a>
                 <a href="{{ route('support') }}" class="transition hover:text-volt">Support</a>
                 <a href="{{ route('llms') }}" class="transition hover:text-volt">llms.txt</a>
             </div>

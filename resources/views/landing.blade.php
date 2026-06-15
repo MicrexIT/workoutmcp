@@ -382,6 +382,7 @@
                 <a href="{{ route('docs') }}" class="transition hover:text-volt">Docs →</a>
                 <a href="{{ route('llms') }}" class="transition hover:text-volt">llms.txt →</a>
                 <a href="{{ route('privacy') }}" class="transition hover:text-volt">Privacy →</a>
+                <a href="{{ route('terms') }}" class="transition hover:text-volt">Terms →</a>
                 <a href="{{ route('support') }}" class="transition hover:text-volt">Support →</a>
                 @auth
                     <a href="{{ route('home') }}" class="transition hover:text-volt">Dashboard →</a>

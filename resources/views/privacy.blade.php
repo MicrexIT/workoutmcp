@@ -71,6 +71,7 @@
 
         <footer class="mt-10 flex flex-wrap gap-4 border-t border-chalk/10 pt-8 font-mono text-xs text-chalk-dim">
             <a href="{{ route('docs') }}" class="transition hover:text-volt">Docs</a>
+            <a href="{{ route('terms') }}" class="transition hover:text-volt">Terms</a>
             <a href="{{ route('support') }}" class="transition hover:text-volt">Support</a>
             <a href="{{ route('landing') }}" class="transition hover:text-volt">Home</a>
         </footer>

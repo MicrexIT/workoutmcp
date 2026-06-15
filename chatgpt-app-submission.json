@@ -1,0 +1,332 @@
+{
+  "$schema": "https://developers.openai.com/apps-sdk/schemas/chatgpt-app-submission.v1.json",
+  "schema_version": 1,
+  "app_info": {
+    "display_name": "Workout Memory",
+    "subtitle": "Workout memory for AI",
+    "description": "Workout Memory lets users log workouts, live sessions, exercise notes, corrections, and training context through ChatGPT. It stores structured workout history for lifting, yoga, spinning, mobility, conditioning, and related training, then helps users recall recent workouts, inspect exercise history, plan from their own data, and create revocable public workout share links only when explicitly requested.",
+    "category": "LIFESTYLE"
+  },
+  "tools": {
+    "get_user_context": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Only retrieves the signed-in user's profile, units, goals, constraints, equipment, and notes.",
+        "open_world_justification": "Does not publish content or modify any third-party or public system.",
+        "destructive_justification": "Does not delete, overwrite, revoke, or irreversibly change data."
+      }
+    },
+    "update_user_context": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Updates durable private training preferences, goals, constraints, equipment, units, timezone, or notes for the signed-in user.",
+        "open_world_justification": "Changes only private Workout Memory account data and cannot publish externally visible content.",
+        "destructive_justification": "Does not delete records or perform irreversible destructive actions."
+      }
+    },
+    "get_current_workout_session": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Only retrieves the current active workout, latest completed workout, and targeting guidance.",
+        "open_world_justification": "Does not write to public internet state or third-party systems.",
+        "destructive_justification": "Does not delete, overwrite, revoke, or irreversibly change data."
+      }
+    },
+    "start_workout_session": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Starts or resumes a private in-progress workout session and may auto-complete a stale active session.",
+        "open_world_justification": "Changes only private Workout Memory account data and cannot publish externally visible content.",
+        "destructive_justification": "Does not delete records; mistakenly finished sessions can be reopened with update_workout."
+      }
+    },
+    "append_session_story": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Appends private narrative notes to a live or recent workout session.",
+        "open_world_justification": "Changes only private Workout Memory account data and cannot publish externally visible content.",
+        "destructive_justification": "Does not delete records or perform irreversible destructive actions."
+      }
+    },
+    "append_workout_exercise": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Adds an exercise block and sets to a private active or recent workout session.",
+        "open_world_justification": "Changes only private Workout Memory account data and cannot publish externally visible content.",
+        "destructive_justification": "Does not delete records; corrections are handled separately by update_workout."
+      }
+    },
+    "finish_workout_session": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Marks the user's active private workout session as completed and may store final notes, effort, bodyweight, and completion time.",
+        "open_world_justification": "Changes only private Workout Memory account data and cannot publish externally visible content.",
+        "destructive_justification": "Does not delete records; a mistakenly completed session can be reopened with update_workout."
+      }
+    },
+    "resolve_exercise_mentions": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Returns exercise matches and may persist short-lived private discovery evidence for later logging.",
+        "open_world_justification": "Writes only private Workout Memory discovery data and cannot publish externally visible content.",
+        "destructive_justification": "Does not delete records or perform irreversible destructive actions."
+      }
+    },
+    "search_exercises": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Returns matching exercises and may persist short-lived private discovery evidence for later use.",
+        "open_world_justification": "Writes only private Workout Memory discovery data and cannot publish externally visible content.",
+        "destructive_justification": "Does not delete records or perform irreversible destructive actions."
+      }
+    },
+    "remember_exercise_phrase": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Stores a private user-scoped phrase mapping so future logs resolve the user's wording consistently.",
+        "open_world_justification": "Changes only private Workout Memory account data and cannot publish externally visible content.",
+        "destructive_justification": "Does not delete records or perform irreversible destructive actions."
+      }
+    },
+    "create_exercise": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Creates a private user-scoped custom exercise after duplicate checks or explicit user request.",
+        "open_world_justification": "Changes only private Workout Memory account data and cannot publish externally visible content.",
+        "destructive_justification": "Does not delete records or perform irreversible destructive actions."
+      }
+    },
+    "log_workout": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Creates a completed private workout with resolved exercises, sets, durations, distances, notes, and change history.",
+        "open_world_justification": "Changes only private Workout Memory account data and cannot publish externally visible content.",
+        "destructive_justification": "Does not delete records; suspected overlap with an active session is refused until the user confirms."
+      }
+    },
+    "list_recent_workouts": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Only retrieves recent completed workout summaries and stale-session notices.",
+        "open_world_justification": "Does not write to public internet state or third-party systems.",
+        "destructive_justification": "Does not delete, overwrite, revoke, or irreversibly change data."
+      }
+    },
+    "get_workout": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Only retrieves one full logged workout with exercises and sets.",
+        "open_world_justification": "Does not write to public internet state or third-party systems.",
+        "destructive_justification": "Does not delete, overwrite, revoke, or irreversibly change data."
+      }
+    },
+    "get_exercise_history": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Only retrieves recent and aggregate history for one exercise.",
+        "open_world_justification": "Does not write to public internet state or third-party systems.",
+        "destructive_justification": "Does not delete, overwrite, revoke, or irreversibly change data."
+      }
+    },
+    "get_training_summary": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Only retrieves summarized recent training context for planning and recall.",
+        "open_world_justification": "Does not write to public internet state or third-party systems.",
+        "destructive_justification": "Does not delete, overwrite, revoke, or irreversibly change data."
+      }
+    },
+    "update_workout": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": true
+      },
+      "justifications": {
+        "read_only_justification": "Corrects private workout records by editing session fields, exercises, sets, mappings, status, or merging workouts.",
+        "open_world_justification": "Changes only private Workout Memory account data and cannot publish externally visible content.",
+        "destructive_justification": "Can remove exercises or sets and merge workouts, and those destructive operations require explicit user confirmation."
+      }
+    },
+    "delete_workout": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": false,
+        "destructiveHint": true
+      },
+      "justifications": {
+        "read_only_justification": "Soft-deletes a private workout record after the user confirms deletion.",
+        "open_world_justification": "Changes only private Workout Memory account data and cannot publish externally visible content.",
+        "destructive_justification": "Soft-deletes a workout and requires user_confirmed=true before applying the deletion."
+      }
+    },
+    "share_workout": {
+      "annotations": {
+        "readOnlyHint": false,
+        "openWorldHint": true,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Creates or returns a public, revocable share link for a completed workout only when the user explicitly asks.",
+        "open_world_justification": "Creates a publicly reachable workout share URL on the app's domain.",
+        "destructive_justification": "Does not delete records or perform irreversible destructive actions; share links can be revoked."
+      }
+    }
+  },
+  "test_cases": [
+    {
+      "description": "Log a mixed completed workout from natural language.",
+      "user_prompt": "Log today's workout: 45 minutes of spinning, 20 minutes of yoga flow, and 10 minutes of mobility.",
+      "file_attachment_urls": null,
+      "tools_triggered": "log_workout",
+      "expected_output": "Creates a completed workout with the relevant exercises or user-scoped exercise entries and summarizes any assumptions clearly.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Track a live workout session from start to finish.",
+      "user_prompt": "I'm starting legs now. Add leg press 3 sets of 10 at 120 kg, note that my knee felt fine, then finish the workout.",
+      "file_attachment_urls": null,
+      "tools_triggered": "start_workout_session, append_workout_exercise, append_session_story, finish_workout_session",
+      "expected_output": "Starts or resumes a live session, appends the exercise and note, completes the session, and returns a concise workout summary.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Recall recent training and inspect one workout.",
+      "user_prompt": "What did I train recently? Show the details for the most recent workout.",
+      "file_attachment_urls": null,
+      "tools_triggered": "list_recent_workouts, get_workout",
+      "expected_output": "Returns recent workout summaries, then shows the selected workout with exercises and sets.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Correct a wrong exercise mapping and remember the wording.",
+      "user_prompt": "In my last workout, that was front squat, not back squat. Fix it and remember that when I say that cue, I mean front squat.",
+      "file_attachment_urls": null,
+      "tools_triggered": "list_recent_workouts, get_workout, update_workout, remember_exercise_phrase",
+      "expected_output": "Fetches the relevant workout IDs, updates the existing entry in place, stores the phrase mapping when appropriate, and confirms the correction.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Answer exercise history and planning context questions.",
+      "user_prompt": "How has my bench press been trending, and what should I keep in mind for my next push workout?",
+      "file_attachment_urls": null,
+      "tools_triggered": "search_exercises, get_exercise_history, get_user_context, get_training_summary",
+      "expected_output": "Finds the exercise, summarizes recent history and user context, and gives planning guidance based on stored workout data.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Create a public workout share link only after explicit request.",
+      "user_prompt": "Share my latest completed workout with a public link I can send to a friend.",
+      "file_attachment_urls": null,
+      "tools_triggered": "list_recent_workouts, share_workout",
+      "expected_output": "Creates or returns a revocable public share URL for the latest completed workout and tells the user it is publicly reachable by link.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Create a custom exercise only after discovery shows no suitable match.",
+      "user_prompt": "I did a new movement called wall-supported dragon squat. If it is not already in the catalog, add it for me and log 3 sets of 5.",
+      "file_attachment_urls": null,
+      "tools_triggered": "resolve_exercise_mentions, create_exercise, log_workout",
+      "expected_output": "Checks for existing matches first, creates a private custom exercise only if appropriate, logs the workout, and reports any assumptions.",
+      "expected_output_url": null
+    }
+  ],
+  "negative_test_cases": [
+    {
+      "description": "Do not trigger for unrelated calendar scheduling.",
+      "user_prompt": "Book me a yoga class next Tuesday at 7 PM.",
+      "file_attachment_urls": null,
+      "tools_triggered": null,
+      "expected_output": "The app should not be invoked because it cannot book classes or manage calendars.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Do not trigger for nutrition tracking outside workout memory.",
+      "user_prompt": "Track my lunch macros and build me a meal plan for cutting.",
+      "file_attachment_urls": null,
+      "tools_triggered": null,
+      "expected_output": "The app should not be invoked because it does not track meals, calories, or nutrition plans.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Do not publish to third-party social networks.",
+      "user_prompt": "Post my latest workout to Instagram and tag my gym.",
+      "file_attachment_urls": null,
+      "tools_triggered": null,
+      "expected_output": "The app should not be invoked to post externally because it can only create a Workout Memory share link when explicitly requested.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Do not trigger for general medical diagnosis.",
+      "user_prompt": "Diagnose my knee pain and tell me whether I tore something.",
+      "file_attachment_urls": null,
+      "tools_triggered": null,
+      "expected_output": "The app should not be invoked for diagnosis; ChatGPT should provide general safety guidance and recommend appropriate medical care.",
+      "expected_output_url": null
+    }
+  ]
+}
