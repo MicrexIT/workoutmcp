@@ -65,6 +65,11 @@ Route::get('/llms.txt', function () {
         ->header('Content-Type', 'text/plain; charset=UTF-8');
 })->name('llms');
 
+Route::get('/.well-known/openai-apps-challenge', function () {
+    return response('2XJII9pcsvG0iSUnuTQTm7PUOP8jT41dSBPzRUxxJZE')
+        ->header('Content-Type', 'text/plain; charset=UTF-8');
+})->name('openai-apps-challenge');
+
 Route::get('/docs', function () {
     $publicUrl = rtrim((string) config('workout_memory.oauth.public_url'), '/');
 

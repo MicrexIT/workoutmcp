@@ -39,6 +39,14 @@ class LandingPageTest extends TestCase
             ->assertSee('Model Context Protocol', false);
     }
 
+    public function test_openai_apps_challenge_returns_verification_token(): void
+    {
+        $this->get('/.well-known/openai-apps-challenge')
+            ->assertOk()
+            ->assertHeader('Content-Type', 'text/plain; charset=UTF-8')
+            ->assertContent('2XJII9pcsvG0iSUnuTQTm7PUOP8jT41dSBPzRUxxJZE');
+    }
+
     public function test_public_review_pages_are_available(): void
     {
         $mcpUrl = rtrim((string) config('workout_memory.oauth.public_url'), '/').'/mcp/workout-memory';
