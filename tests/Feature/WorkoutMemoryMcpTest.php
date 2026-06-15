@@ -27,6 +27,9 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\JsonSchema\JsonSchemaTypeFactory;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\Fluent\AssertableJson;
+use Laravel\Mcp\Server\Methods\ListTools;
+use Laravel\Mcp\Server\Transport\FakeTransporter;
+use Laravel\Mcp\Transport\JsonRpcRequest;
 use Tests\TestCase;
 
 class WorkoutMemoryMcpTest extends TestCase
@@ -1572,6 +1575,24 @@ SQL);
             $this->assertArrayHasKey('destructiveHint', (array) $tool['annotations'], "{$class} is missing destructiveHint.");
             $this->assertArrayHasKey('openWorldHint', (array) $tool['annotations'], "{$class} is missing openWorldHint.");
         }
+    }
+
+    public function test_default_tools_list_response_contains_every_registered_tool(): void
+    {
+        $server = app()->make(WorkoutMemoryServer::class, ['transport' => new FakeTransporter]);
+        $response = (new ListTools)->handle(
+            new JsonRpcRequest('tools-list', 'tools/list', []),
+            $server->createContext(),
+        )->toArray();
+
+        $toolNames = collect($response['result']['tools'])->pluck('name')->all();
+        $registeredToolCount = count((new \ReflectionClass(WorkoutMemoryServer::class))->getProperty('tools')->getDefaultValue());
+
+        $this->assertCount($registeredToolCount, $toolNames);
+        $this->assertContains('update_workout', $toolNames);
+        $this->assertContains('delete_workout', $toolNames);
+        $this->assertContains('share_workout', $toolNames);
+        $this->assertArrayNotHasKey('nextCursor', $response['result']);
     }
 
     public function test_reopen_session_refuses_while_another_session_is_active(): void
