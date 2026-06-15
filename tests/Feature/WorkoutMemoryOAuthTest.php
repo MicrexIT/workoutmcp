@@ -36,7 +36,8 @@ class WorkoutMemoryOAuthTest extends TestCase
             ->assertOk()
             ->assertJsonPath('resource', 'https://workout-memory.test/mcp/workout-memory')
             ->assertJsonPath('authorization_servers.0', 'https://workout-memory.test')
-            ->assertJsonPath('scopes_supported.0', 'mcp:use');
+            ->assertJsonPath('scopes_supported.0', 'mcp:use')
+            ->assertJsonPath('resource_documentation', 'https://workout-memory.test/docs');
 
         $this->getJson('/.well-known/oauth-authorization-server')
             ->assertOk()

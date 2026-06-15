@@ -13,6 +13,14 @@ return [
         'enabled' => (bool) env('WORKOUT_MEMORY_REGISTRATION_ENABLED', true),
     ],
 
+    'company' => [
+        'name' => env('WORKOUT_MEMORY_COMPANY_NAME', 'Remics Software Technologies - FZCO'),
+    ],
+
+    'support' => [
+        'email' => env('WORKOUT_MEMORY_SUPPORT_EMAIL', 'michele@remics.tech'),
+    ],
+
     'mcp_private_token' => env('MCP_PRIVATE_TOKEN'),
 
     'oauth' => [

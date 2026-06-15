@@ -11,9 +11,15 @@ use Laravel\Mcp\ResponseFactory;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Attributes\Name;
 use Laravel\Mcp\Server\Tool;
+use Laravel\Mcp\Server\Tools\Annotations\IsDestructive;
+use Laravel\Mcp\Server\Tools\Annotations\IsOpenWorld;
+use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 
 #[Name('search_exercises')]
 #[Description('Search exercises by name, alias, muscle, equipment, category, tracking mode, tags, or granularity. Tries to persist discovery evidence when query is present, but still returns matches if evidence persistence is unavailable.')]
+#[IsReadOnly(false)]
+#[IsDestructive(false)]
+#[IsOpenWorld(false)]
 class SearchExercisesTool extends Tool
 {
     use ResolvesWorkoutUser;

@@ -21,6 +21,9 @@ class LandingPageTest extends TestCase
             ->assertSee('https://chatgpt.com/?q=', false)
             ->assertSee('https://claude.ai/new?q=', false)
             ->assertSee(route('login'), false)
+            ->assertSee(route('docs'), false)
+            ->assertSee(route('privacy'), false)
+            ->assertSee(route('support'), false)
             ->assertSee('Remics Software Technologies - FZCO');
     }
 
@@ -33,6 +36,30 @@ class LandingPageTest extends TestCase
             ->assertHeader('Content-Type', 'text/plain; charset=UTF-8')
             ->assertSee($publicUrl.'/mcp/workout-memory', false)
             ->assertSee('Model Context Protocol', false);
+    }
+
+    public function test_public_review_pages_are_available(): void
+    {
+        $mcpUrl = rtrim((string) config('workout_memory.oauth.public_url'), '/').'/mcp/workout-memory';
+        $supportEmail = (string) config('workout_memory.support.email');
+
+        $this->get('/docs')
+            ->assertOk()
+            ->assertSee('Connector documentation')
+            ->assertSee($mcpUrl, false)
+            ->assertSee($supportEmail, false);
+
+        $this->get('/privacy')
+            ->assertOk()
+            ->assertSee('Privacy Policy')
+            ->assertSee('Last updated June 15, 2026')
+            ->assertSee($supportEmail, false);
+
+        $this->get('/support')
+            ->assertOk()
+            ->assertSee('Support')
+            ->assertSee($mcpUrl, false)
+            ->assertSee($supportEmail, false);
     }
 
     public function test_landing_shows_closed_notice_when_registration_is_closed(): void

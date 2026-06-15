@@ -65,6 +65,33 @@ Route::get('/llms.txt', function () {
         ->header('Content-Type', 'text/plain; charset=UTF-8');
 })->name('llms');
 
+Route::get('/docs', function () {
+    $publicUrl = rtrim((string) config('workout_memory.oauth.public_url'), '/');
+
+    return view('docs', [
+        'publicUrl' => $publicUrl,
+        'mcpUrl' => $publicUrl.'/mcp/workout-memory',
+        'supportEmail' => (string) config('workout_memory.support.email'),
+    ]);
+})->name('docs');
+
+Route::get('/privacy', function () {
+    return view('privacy', [
+        'companyName' => (string) config('workout_memory.company.name'),
+        'supportEmail' => (string) config('workout_memory.support.email'),
+    ]);
+})->name('privacy');
+
+Route::get('/support', function () {
+    $publicUrl = rtrim((string) config('workout_memory.oauth.public_url'), '/');
+
+    return view('support', [
+        'publicUrl' => $publicUrl,
+        'mcpUrl' => $publicUrl.'/mcp/workout-memory',
+        'supportEmail' => (string) config('workout_memory.support.email'),
+    ]);
+})->name('support');
+
 Route::middleware('guest')->group(function (): void {
     Route::get('/register', [RegisteredUserController::class, 'create'])->name('register');
     Route::post('/register', [RegisteredUserController::class, 'store'])

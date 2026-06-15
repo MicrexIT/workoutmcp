@@ -1560,6 +1560,20 @@ SQL);
         }
     }
 
+    public function test_every_tool_has_review_ready_safety_annotations(): void
+    {
+        foreach (glob(app_path('Mcp/Tools/*.php')) as $file) {
+            $class = 'App\\Mcp\\Tools\\'.basename($file, '.php');
+            $tool = app($class)->toArray();
+
+            $this->assertNotEmpty($tool['title'], "{$class} is missing a title.");
+            $this->assertNotEmpty($tool['description'], "{$class} is missing a description.");
+            $this->assertArrayHasKey('readOnlyHint', (array) $tool['annotations'], "{$class} is missing readOnlyHint.");
+            $this->assertArrayHasKey('destructiveHint', (array) $tool['annotations'], "{$class} is missing destructiveHint.");
+            $this->assertArrayHasKey('openWorldHint', (array) $tool['annotations'], "{$class} is missing openWorldHint.");
+        }
+    }
+
     public function test_reopen_session_refuses_while_another_session_is_active(): void
     {
         $user = app(CurrentUserResolver::class)->user();

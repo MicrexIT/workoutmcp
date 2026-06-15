@@ -33,7 +33,7 @@ class McpOAuthServer
             'resource' => $this->resourceUrl($path),
             'authorization_servers' => [$this->issuer()],
             'scopes_supported' => [self::Scope],
-            'resource_documentation' => $this->publicUrl('/'),
+            'resource_documentation' => $this->publicUrl('/docs'),
         ];
     }
 

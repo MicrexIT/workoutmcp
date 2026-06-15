@@ -4,14 +4,14 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Workout Memory · the workout app you never open</title>
-    <meta name="description" content="Workout Memory is an MCP server that gives ChatGPT, Claude and any AI with MCP support a permanent memory for your training. Say what you lifted and it logs every set, tracks your best lifts, and answers months later.">
+    <meta name="description" content="Workout Memory is an MCP server that gives ChatGPT, Claude and any AI with MCP support a permanent memory for your training. Say what you did and it logs sets, minutes, distance, notes, and answers months later.">
     <link rel="canonical" href="{{ url('/') }}">
     <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}">
     <meta name="theme-color" content="#191813">
     <meta property="og:type" content="website">
     <meta property="og:url" content="{{ url('/') }}">
     <meta property="og:title" content="Workout Memory · the workout app you never open">
-    <meta property="og:description" content="Give ChatGPT, Claude and any AI with MCP support a permanent memory for your training. Say what you lifted and every set becomes history your AI can answer from.">
+    <meta property="og:description" content="Give ChatGPT, Claude and any AI with MCP support a permanent memory for your training. Say what you did and each workout becomes history your AI can answer from.">
     <meta name="twitter:card" content="summary">
     {{ \Illuminate\Support\Facades\Vite::fonts() }}
     @vite(['resources/css/app.css', 'resources/js/app.js'])
@@ -57,8 +57,8 @@
                     </h1>
                     <p class="mt-6 max-w-xl text-lg leading-relaxed text-chalk-dim">
                         Workout Memory gives ChatGPT, Claude and any AI with MCP support a permanent
-                        memory for your training. Say what you lifted, in your own words, at the gym
-                        or hours later. Every set becomes history your AI can actually answer from.
+                        memory for your training. Say what you did, in your own words, at the gym,
+                        on the bike, on the mat, or hours later. Each workout becomes history your AI can actually answer from.
                     </p>
                     <div class="mt-8 flex flex-wrap items-center gap-x-5 gap-y-4">
                         <a href="#setup" data-tab="tab-chatgpt" class="bg-volt px-7 py-4 font-display text-base uppercase tracking-wider text-ink transition hover:-translate-y-0.5 hover:bg-volt-hot">Set up in ChatGPT</a>
@@ -137,9 +137,9 @@
                 <div class="mt-8 grid gap-8 lg:grid-cols-2">
                     <p class="text-lg leading-relaxed text-chalk-dim">
                         Apps like <a href="https://www.strongapp.io" target="_blank" rel="noopener" class="text-chalk underline decoration-volt decoration-2 underline-offset-4 transition hover:text-volt">Strong</a>
-                        perfected the workout log — every set tapped in between sets, for years. Workout Memory
-                        keeps the log and drops the app: you already talk to your AI, so your training history
-                        lives there now. Say it, it's saved. Ask, and it remembers.
+                        perfected detailed workout logs. Workout Memory keeps the log and drops the app:
+                        lifting, yoga, spinning, mobility and conditioning all become part of the same history.
+                        Say it, it's saved. Ask, and it remembers.
                     </p>
                     <p class="text-lg leading-relaxed text-chalk-dim">
                         Under the hood it's an MCP server — the open standard for giving AI apps tools and memory.
@@ -190,19 +190,19 @@
         <section class="scroll-mt-24 border-t border-chalk/10">
             <div class="mx-auto max-w-6xl px-5 py-20 sm:px-8 lg:py-24">
                 <p class="font-mono text-xs uppercase tracking-[0.3em] text-volt">03 / what it remembers</p>
-                <h2 class="mt-4 font-display text-[clamp(2rem,4.5vw,3.4rem)] uppercase leading-[0.95]">A memory built for iron.</h2>
+                <h2 class="mt-4 font-display text-[clamp(2rem,4.5vw,3.4rem)] uppercase leading-[0.95]">A memory built for training.</h2>
                 <div class="mt-10 grid gap-px border border-chalk/10 bg-chalk/10 sm:grid-cols-2 lg:grid-cols-3">
                     <div class="bg-ink p-7">
                         <p class="font-mono text-xs text-volt">live_sessions</p>
                         <p class="mt-3 text-sm leading-relaxed text-chalk-dim">Start a session at the gym and append sets as they happen. Forget to close it? It finishes itself after 18 hours.</p>
                     </div>
                     <div class="bg-ink p-7">
-                        <p class="font-mono text-xs text-volt">sets_reps_loads</p>
-                        <p class="mt-3 text-sm leading-relaxed text-chalk-dim">Every set with reps, load and notes. Structured history, not a text blob lost in a chat thread.</p>
+                        <p class="font-mono text-xs text-volt">sets_minutes_distance</p>
+                        <p class="mt-3 text-sm leading-relaxed text-chalk-dim">Sets, reps, loads, minutes, distance and notes. Structured history, not a text blob lost in a chat thread.</p>
                     </div>
                     <div class="bg-ink p-7">
                         <p class="font-mono text-xs text-volt">best_sets_and_history</p>
-                        <p class="mt-3 text-sm leading-relaxed text-chalk-dim">Per-exercise history with best sets, so a PR gets called out the moment you beat it.</p>
+                        <p class="mt-3 text-sm leading-relaxed text-chalk-dim">Per-exercise history with best efforts when relevant, so a PR gets called out the moment you beat it.</p>
                     </div>
                     <div class="bg-ink p-7">
                         <p class="font-mono text-xs text-volt">your_vocabulary</p>
@@ -375,11 +375,14 @@
                     </svg>
                     <span class="font-display text-base uppercase tracking-wide">Workout Memory</span>
                 </div>
-                <p class="mt-3 max-w-sm text-xs leading-relaxed text-chalk-dim">An MCP server by Remics Software Technologies - FZCO. Built for people who'd rather lift than tap.</p>
+                <p class="mt-3 max-w-sm text-xs leading-relaxed text-chalk-dim">An MCP server by Remics Software Technologies - FZCO. Built for people who'd rather train than tap.</p>
             </div>
             <div class="flex flex-col gap-2 font-mono text-xs text-chalk-dim sm:items-end">
                 <code class="break-all">{{ $mcpUrl }}</code>
+                <a href="{{ route('docs') }}" class="transition hover:text-volt">Docs →</a>
                 <a href="{{ route('llms') }}" class="transition hover:text-volt">llms.txt →</a>
+                <a href="{{ route('privacy') }}" class="transition hover:text-volt">Privacy →</a>
+                <a href="{{ route('support') }}" class="transition hover:text-volt">Support →</a>
                 @auth
                     <a href="{{ route('home') }}" class="transition hover:text-volt">Dashboard →</a>
                 @else

@@ -13,11 +13,15 @@ use Laravel\Mcp\Server\Attributes\Name;
 use Laravel\Mcp\Server\Tool;
 use Laravel\Mcp\Server\Tools\Annotations\IsDestructive;
 use Laravel\Mcp\Server\Tools\Annotations\IsIdempotent;
+use Laravel\Mcp\Server\Tools\Annotations\IsOpenWorld;
+use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 
 #[Name('update_workout')]
 #[Description('Correct a logged workout in place with ordered operations: update_session (rename, re-date to when it really happened, notes, effort, bodyweight); add_exercise (a genuinely missing entry; same shape and server-side resolution as log_workout entries — never a corrected duplicate of an existing entry); update_exercise (THE way to fix a wrong entry — it remaps in place and keeps the sets: send the user\'s corrected wording as raw_phrase — resolved server-side, flagged auto-create as last resort, never refused — or an explicit exercise_id, which is authoritative and applied even when the entry\'s old wording resolves elsewhere; set remember_phrase=true when the user confirms the wording always means that exercise; an unchanged correction is reported with a hint); add_set / update_set / remove_set; remove_exercise (delete an entry that should not exist at all, e.g. a duplicate — to swap a wrong exercise use update_exercise instead); reopen_session (set a wrongly-completed workout back to in_progress so live appends target it again); merge_workout (absorb another workout that was really the same session into this one, deleting the emptied source). remove_exercise, remove_set, and merge_workout require user_confirmed_destructive_change=true; the user\'s own request to delete, replace, or merge counts as that confirmation — ask first only for removals they did not ask for. A refused call applies none of its operations. Fetch workout_exercise_id / workout_set_id values from get_workout or the logging response first; field-level details are described in the operations schema.')]
-#[IsIdempotent]
+#[IsReadOnly(false)]
 #[IsDestructive]
+#[IsOpenWorld(false)]
+#[IsIdempotent]
 class UpdateWorkoutTool extends Tool
 {
     use ResolvesWorkoutUser;

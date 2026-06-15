@@ -14,10 +14,16 @@ use Laravel\Mcp\ResponseFactory;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Attributes\Name;
 use Laravel\Mcp\Server\Tool;
+use Laravel\Mcp\Server\Tools\Annotations\IsDestructive;
 use Laravel\Mcp\Server\Tools\Annotations\IsIdempotent;
+use Laravel\Mcp\Server\Tools\Annotations\IsOpenWorld;
+use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 
 #[Name('remember_exercise_phrase')]
 #[Description('Teach the server that a phrase means a specific exercise for this user. Use it when the user corrects a match, confirms an assumed or auto-created mapping, or asks to remember wording like "when I say calves I mean seated calf raise". Future resolve and log calls map the phrase directly. This stores user-scoped phrase memory; it never edits the shared exercise catalog.')]
+#[IsReadOnly(false)]
+#[IsDestructive(false)]
+#[IsOpenWorld(false)]
 #[IsIdempotent]
 class RememberExercisePhraseTool extends Tool
 {

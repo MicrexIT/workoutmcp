@@ -13,11 +13,15 @@ use Laravel\Mcp\Server\Attributes\Name;
 use Laravel\Mcp\Server\Tool;
 use Laravel\Mcp\Server\Tools\Annotations\IsDestructive;
 use Laravel\Mcp\Server\Tools\Annotations\IsIdempotent;
+use Laravel\Mcp\Server\Tools\Annotations\IsOpenWorld;
+use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 
 #[Name('delete_workout')]
 #[Description('Soft-delete a mistakenly logged workout. Requires user_confirmed=true.')]
-#[IsIdempotent]
+#[IsReadOnly(false)]
 #[IsDestructive]
+#[IsOpenWorld(false)]
+#[IsIdempotent]
 class DeleteWorkoutTool extends Tool
 {
     use ResolvesWorkoutUser;

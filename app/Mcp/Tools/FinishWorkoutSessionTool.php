@@ -11,10 +11,16 @@ use Laravel\Mcp\ResponseFactory;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Attributes\Name;
 use Laravel\Mcp\Server\Tool;
+use Laravel\Mcp\Server\Tools\Annotations\IsDestructive;
 use Laravel\Mcp\Server\Tools\Annotations\IsIdempotent;
+use Laravel\Mcp\Server\Tools\Annotations\IsOpenWorld;
+use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 
 #[Name('finish_workout_session')]
 #[Description('Finish the active in-progress workout when the user says they are done. Sets status=completed and can store final RPE, bodyweight, notes, and completed_at. Always works on the current active session, even one left open for a long time. Do not use this to log an older completed workout; use log_workout for that. If the session was finished by mistake, update_workout with a reopen_session operation undoes it. Provide a stable per-action idempotency_key such as "<message_id>:finish".')]
+#[IsReadOnly(false)]
+#[IsDestructive(false)]
+#[IsOpenWorld(false)]
 #[IsIdempotent]
 class FinishWorkoutSessionTool extends Tool
 {
