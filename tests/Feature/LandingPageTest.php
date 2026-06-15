@@ -20,6 +20,8 @@ class LandingPageTest extends TestCase
             ->assertSee($mcpUrl)
             ->assertSee('https://chatgpt.com/?q=', false)
             ->assertSee('https://claude.ai/new?q=', false)
+            ->assertSee('Can I add old workouts from my notes?')
+            ->assertSee('paste a chunk of your old training notes or a CSV')
             ->assertSee(route('login'), false)
             ->assertSee(route('docs'), false)
             ->assertSee(route('privacy'), false)
