@@ -317,8 +317,9 @@ FILESYSTEM_DISK=local
 QUEUE_CONNECTION=database
 CACHE_STORE=database
 
-MAIL_MAILER=log
-MAIL_FROM_ADDRESS="hello@example.com"
+MAIL_MAILER=resend
+RESEND_API_KEY=change-me
+MAIL_FROM_ADDRESS="no-reply@workoutmcp.com"
 MAIL_FROM_NAME="\${APP_NAME}"
 
 VITE_APP_NAME="\${APP_NAME}"

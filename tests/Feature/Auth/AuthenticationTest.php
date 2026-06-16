@@ -7,7 +7,9 @@ use App\Providers\AppServiceProvider;
 use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
+use Illuminate\Mail\Transport\ResendTransport;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\URL;
 use Tests\TestCase;
@@ -208,6 +210,16 @@ class AuthenticationTest extends TestCase
             ->assertSessionHas('status', 'Verification link sent.');
 
         Notification::assertSentTo($user, VerifyEmail::class);
+    }
+
+    public function test_resend_mailer_can_be_resolved_for_production_email_delivery(): void
+    {
+        config()->set('services.resend.key', 're_test_key');
+
+        $this->assertInstanceOf(
+            ResendTransport::class,
+            Mail::mailer('resend')->getSymfonyTransport(),
+        );
     }
 
     public function test_login_route_is_rate_limited(): void
