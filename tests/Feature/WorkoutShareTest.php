@@ -32,6 +32,7 @@ class WorkoutShareTest extends TestCase
 
         $this->seed();
         $this->user = app(CurrentUserResolver::class)->user();
+        $this->user->markEmailAsVerified();
     }
 
     public function test_share_workout_tool_creates_link_for_latest_completed_workout(): void

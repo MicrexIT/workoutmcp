@@ -1747,7 +1747,10 @@ SQL);
 
     public function test_debug_pages_load(): void
     {
-        $this->actingAs(app(CurrentUserResolver::class)->user());
+        $user = app(CurrentUserResolver::class)->user();
+        $user->markEmailAsVerified();
+
+        $this->actingAs($user);
 
         $this->get('/dashboard')->assertOk()->assertSee('Workout Memory MCP');
         $this->get('/exercises')->assertOk()->assertSee('Dead Hang');

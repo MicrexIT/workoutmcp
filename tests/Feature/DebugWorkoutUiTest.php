@@ -22,6 +22,7 @@ class DebugWorkoutUiTest extends TestCase
 
         $this->seed();
         $this->user = app(CurrentUserResolver::class)->user();
+        $this->user->markEmailAsVerified();
         $this->actingAs($this->user);
     }
 

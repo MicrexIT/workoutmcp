@@ -9,6 +9,10 @@ use App\Services\WorkoutMemory\CurrentUserResolver;
 use App\Services\WorkoutMemory\TrainingSummaryService;
 use App\Services\WorkoutMemory\WorkoutShareService;
 use App\Services\WorkoutMemory\WorkoutUpdater;
+use Illuminate\Contracts\View\View;
+use Illuminate\Foundation\Auth\EmailVerificationRequest;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Route;
 
@@ -29,7 +33,7 @@ Route::get('/', function () {
         'chatGptPromptUrl' => 'https://chatgpt.com/?q='.rawurlencode($setupPrompt),
         'claudePromptUrl' => 'https://claude.ai/new?q='.rawurlencode($setupPrompt),
     ]);
-})->name('landing');
+})->middleware('throttle:public')->name('landing');
 
 Route::get('/w/{slug}', function (string $slug, TrainingSummaryService $summaries, WorkoutShareService $shares) {
     $share = WorkoutShare::query()->where('slug', $slug)->active()->first();
@@ -52,7 +56,7 @@ Route::get('/w/{slug}', function (string $slug, TrainingSummaryService $summarie
         'dateLabel' => $workout['started_at'] ? Carbon::parse($workout['started_at'])->format('j M Y') : null,
         'ownerFirstName' => str($share->user->name)->trim()->explode(' ')->first(),
     ]);
-})->where('slug', '[a-zA-Z0-9]+')->name('workouts.shared');
+})->middleware('throttle:public')->where('slug', '[a-zA-Z0-9]+')->name('workouts.shared');
 
 Route::get('/llms.txt', function () {
     $publicUrl = rtrim((string) config('workout_memory.oauth.public_url'), '/');
@@ -63,12 +67,12 @@ Route::get('/llms.txt', function () {
             'mcpUrl' => $publicUrl.'/mcp/workout-memory',
         ])
         ->header('Content-Type', 'text/plain; charset=UTF-8');
-})->name('llms');
+})->middleware('throttle:public')->name('llms');
 
 Route::get('/.well-known/openai-apps-challenge', function () {
     return response('2XJII9pcsvG0iSUnuTQTm7PUOP8jT41dSBPzRUxxJZE')
         ->header('Content-Type', 'text/plain; charset=UTF-8');
-})->name('openai-apps-challenge');
+})->middleware('throttle:public')->name('openai-apps-challenge');
 
 Route::get('/docs', function () {
     $publicUrl = rtrim((string) config('workout_memory.oauth.public_url'), '/');
@@ -78,21 +82,21 @@ Route::get('/docs', function () {
         'mcpUrl' => $publicUrl.'/mcp/workout-memory',
         'supportEmail' => (string) config('workout_memory.support.email'),
     ]);
-})->name('docs');
+})->middleware('throttle:public')->name('docs');
 
 Route::get('/privacy', function () {
     return view('privacy', [
         'companyName' => (string) config('workout_memory.company.name'),
         'supportEmail' => (string) config('workout_memory.support.email'),
     ]);
-})->name('privacy');
+})->middleware('throttle:public')->name('privacy');
 
 Route::get('/terms', function () {
     return view('terms', [
         'companyName' => (string) config('workout_memory.company.name'),
         'supportEmail' => (string) config('workout_memory.support.email'),
     ]);
-})->name('terms');
+})->middleware('throttle:public')->name('terms');
 
 Route::get('/support', function () {
     $publicUrl = rtrim((string) config('workout_memory.oauth.public_url'), '/');
@@ -102,25 +106,44 @@ Route::get('/support', function () {
         'mcpUrl' => $publicUrl.'/mcp/workout-memory',
         'supportEmail' => (string) config('workout_memory.support.email'),
     ]);
-})->name('support');
+})->middleware('throttle:public')->name('support');
 
 Route::middleware('guest')->group(function (): void {
     Route::get('/register', [RegisteredUserController::class, 'create'])->name('register');
     Route::post('/register', [RegisteredUserController::class, 'store'])
-        ->middleware('throttle:5,1')
+        ->middleware('throttle:registration')
         ->name('register.store');
 
     Route::get('/login', [AuthenticatedSessionController::class, 'create'])->name('login');
     Route::post('/login', [AuthenticatedSessionController::class, 'store'])
-        ->middleware('throttle:10,1')
+        ->middleware('throttle:login')
         ->name('login.store');
 });
 
 Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])
-    ->middleware('auth')
+    ->middleware(['auth', 'throttle:authenticated-web'])
     ->name('logout');
 
 Route::middleware('auth')->group(function (): void {
+    Route::get('/email/verify', function (): View {
+        return view('auth.verify-email');
+    })->name('verification.notice');
+
+    Route::get('/email/verify/{id}/{hash}', function (EmailVerificationRequest $request): RedirectResponse {
+        $request->fulfill();
+
+        return redirect()->intended(route('home'))
+            ->with('status', 'Email verified.');
+    })->middleware(['signed', 'throttle:email-verification'])->name('verification.verify');
+
+    Route::post('/email/verification-notification', function (Request $request): RedirectResponse {
+        $request->user()->sendEmailVerificationNotification();
+
+        return back()->with('status', 'Verification link sent.');
+    })->middleware('throttle:email-verification')->name('verification.send');
+});
+
+Route::middleware(['auth', 'verified', 'throttle:authenticated-web'])->group(function (): void {
     Route::get('/dashboard', function (CurrentUserResolver $users) {
         $user = $users->user();
 

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\RegisterUserRequest;
 use App\Models\User;
 use App\Services\WorkoutMemory\CurrentUserResolver;
+use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\View\View;
@@ -27,12 +28,13 @@ class RegisteredUserController extends Controller
         $user = User::query()->create($request->safe()->only(['name', 'email', 'password']));
 
         $users->withProfile($user);
+        event(new Registered($user));
 
         Auth::login($user);
         $request->session()->regenerate();
 
-        return redirect()->intended(route('home'))
-            ->with('status', 'Account created.');
+        return redirect()->route('verification.notice')
+            ->with('status', 'Account created. Check your email to verify your address.');
     }
 
     private function registrationOpen(): bool

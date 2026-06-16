@@ -110,8 +110,10 @@ class LandingPageTest extends TestCase
     public function test_authenticated_user_sees_dashboard_link_on_landing(): void
     {
         $this->seed();
+        $user = app(CurrentUserResolver::class)->user();
+        $user->markEmailAsVerified();
 
-        $this->actingAs(app(CurrentUserResolver::class)->user())
+        $this->actingAs($user)
             ->get('/')
             ->assertOk()
             ->assertSee('Dashboard')
@@ -126,8 +128,10 @@ class LandingPageTest extends TestCase
     public function test_authenticated_user_can_open_dashboard(): void
     {
         $this->seed();
+        $user = app(CurrentUserResolver::class)->user();
+        $user->markEmailAsVerified();
 
-        $this->actingAs(app(CurrentUserResolver::class)->user())
+        $this->actingAs($user)
             ->get('/dashboard')
             ->assertOk()
             ->assertSee('Workout Memory MCP');

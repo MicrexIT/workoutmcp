@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\User;
 use App\Services\WorkoutMemory\CurrentUserResolver;
+use App\Services\WorkoutMemory\McpOAuthServer;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
@@ -28,6 +29,7 @@ class WorkoutMemoryOAuthTest extends TestCase
 
         Cache::flush();
         $this->seed();
+        app(CurrentUserResolver::class)->user()->markEmailAsVerified();
     }
 
     public function test_oauth_metadata_is_advertised_for_mcp_clients(): void
@@ -129,10 +131,19 @@ class WorkoutMemoryOAuthTest extends TestCase
             ->assertRedirect(route('login'));
     }
 
+    public function test_oauth_authorization_requires_verified_email(): void
+    {
+        $user = User::factory()->unverified()->create();
+
+        $this->actingAs($user)
+            ->get('/oauth/authorize?'.http_build_query($this->authorizationParams()))
+            ->assertRedirect(route('verification.notice'));
+    }
+
     public function test_oauth_authorization_request_survives_login_redirect(): void
     {
         $user = User::factory()->create([
-            'email' => 'michele@example.com',
+            'email' => 'oauth-login@example.com',
             'password' => Hash::make('very-secure-password'),
         ]);
         $authorization = $this->authorizationParams();
@@ -146,7 +157,7 @@ class WorkoutMemoryOAuthTest extends TestCase
         $this->assertSameAuthorizationUrl($authorizationUrl, (string) session('url.intended'));
 
         $loginRedirect = $this->post(route('login.store'), [
-            'email' => 'michele@example.com',
+            'email' => 'oauth-login@example.com',
             'password' => 'very-secure-password',
         ])->assertRedirect();
 
@@ -178,6 +189,37 @@ class WorkoutMemoryOAuthTest extends TestCase
             'resource_metadata="http://workout-memory.test',
             (string) $response->headers->get('WWW-Authenticate'),
         );
+    }
+
+    public function test_mcp_endpoint_requires_verified_token_owner(): void
+    {
+        $user = User::factory()->unverified()->create();
+        $verifier = str_repeat('z', 64);
+        $authorization = $this->authorizationParams([
+            'code_challenge' => $this->pkceChallenge($verifier),
+        ]);
+        $code = app(McpOAuthServer::class)->issueAuthorizationCode($authorization, $user);
+        $tokens = app(McpOAuthServer::class)->token([
+            'grant_type' => 'authorization_code',
+            'client_id' => $authorization['client_id'],
+            'redirect_uri' => $authorization['redirect_uri'],
+            'code' => $code,
+            'code_verifier' => $verifier,
+            'resource' => 'https://workout-memory.test/mcp/workout-memory',
+        ]);
+
+        $this->withToken((string) $tokens['access_token'])
+            ->postJson('/mcp/workout-memory', $this->initializePayload())
+            ->assertForbidden()
+            ->assertJsonPath('message', 'Your email address is not verified.');
+    }
+
+    public function test_mcp_endpoint_rate_limits_missing_oauth_tokens(): void
+    {
+        config()->set('workout_memory.rate_limits.mcp_unauthenticated_per_minute', 1);
+
+        $this->postJson('/mcp/workout-memory', [])->assertUnauthorized();
+        $this->postJson('/mcp/workout-memory', [])->assertStatus(429);
     }
 
     public function test_dynamic_client_registration_accepts_mcp_client_redirect_uris(): void
@@ -520,21 +562,29 @@ class WorkoutMemoryOAuthTest extends TestCase
     private function assertMcpAccessWorks(string $accessToken): void
     {
         $this->withToken($accessToken)
-            ->postJson('/mcp/workout-memory', [
-                'jsonrpc' => '2.0',
-                'id' => 1,
-                'method' => 'initialize',
-                'params' => [
-                    'protocolVersion' => '2025-11-25',
-                    'capabilities' => [],
-                    'clientInfo' => [
-                        'name' => 'phpunit',
-                        'version' => '1.0.0',
-                    ],
-                ],
-            ])
+            ->postJson('/mcp/workout-memory', $this->initializePayload())
             ->assertOk()
             ->assertJsonPath('result.serverInfo.name', 'Workout Memory Server');
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function initializePayload(): array
+    {
+        return [
+            'jsonrpc' => '2.0',
+            'id' => 1,
+            'method' => 'initialize',
+            'params' => [
+                'protocolVersion' => '2025-11-25',
+                'capabilities' => [],
+                'clientInfo' => [
+                    'name' => 'phpunit',
+                    'version' => '1.0.0',
+                ],
+            ],
+        ];
     }
 
     private function pkceChallenge(string $verifier): string

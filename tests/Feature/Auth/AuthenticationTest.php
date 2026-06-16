@@ -4,9 +4,11 @@ namespace Tests\Feature\Auth;
 
 use App\Models\User;
 use App\Providers\AppServiceProvider;
+use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\URL;
 use Tests\TestCase;
 
@@ -23,16 +25,21 @@ class AuthenticationTest extends TestCase
 
     public function test_first_account_can_register_and_is_authenticated(): void
     {
+        Notification::fake();
+
         $this->post(route('register.store'), [
             'name' => 'Michele',
             'email' => 'michele@example.com',
             'password' => 'very-secure-password',
             'password_confirmation' => 'very-secure-password',
         ])
-            ->assertRedirect(route('home'))
-            ->assertSessionHas('status', 'Account created.');
+            ->assertRedirect(route('verification.notice'))
+            ->assertSessionHas('status', 'Account created. Check your email to verify your address.');
 
-        $this->assertAuthenticated();
+        $user = User::query()->where('email', 'michele@example.com')->firstOrFail();
+
+        $this->assertAuthenticatedAs($user);
+        $this->assertFalse($user->hasVerifiedEmail());
         $this->assertDatabaseHas('users', [
             'email' => 'michele@example.com',
             'name' => 'Michele',
@@ -42,10 +49,13 @@ class AuthenticationTest extends TestCase
             'preferred_distance_unit' => 'm',
             'timezone' => 'Europe/Paris',
         ]);
+        Notification::assertSentTo($user, VerifyEmail::class);
     }
 
-    public function test_first_account_registration_redirects_to_intended_oauth_request(): void
+    public function test_first_account_registration_preserves_intended_oauth_request_until_verification(): void
     {
+        Notification::fake();
+
         $intendedUrl = 'https://workout-memory.test/oauth/authorize?response_type=code&client_id=chatgpt';
 
         $this->withSession(['url.intended' => $intendedUrl])
@@ -55,10 +65,26 @@ class AuthenticationTest extends TestCase
                 'password' => 'very-secure-password',
                 'password_confirmation' => 'very-secure-password',
             ])
-            ->assertRedirect($intendedUrl)
-            ->assertSessionHas('status', 'Account created.');
+            ->assertRedirect(route('verification.notice'))
+            ->assertSessionHas('status', 'Account created. Check your email to verify your address.');
 
-        $this->assertAuthenticated();
+        $user = User::query()->where('email', 'michele@example.com')->firstOrFail();
+        $verificationUrl = URL::temporarySignedRoute(
+            'verification.verify',
+            now()->addMinutes(60),
+            [
+                'id' => $user->id,
+                'hash' => sha1($user->email),
+            ],
+        );
+
+        $this->assertAuthenticatedAs($user);
+
+        $this->get($verificationUrl)
+            ->assertRedirect($intendedUrl)
+            ->assertSessionHas('status', 'Email verified.');
+
+        $this->assertTrue($user->fresh()->hasVerifiedEmail());
     }
 
     public function test_registration_stays_open_after_an_account_exists_by_default(): void
@@ -159,6 +185,50 @@ class AuthenticationTest extends TestCase
         $this->get('/dashboard')->assertRedirect(route('login'));
         $this->get('/exercises')->assertRedirect(route('login'));
         $this->get('/workouts')->assertRedirect(route('login'));
+    }
+
+    public function test_dashboard_routes_require_verified_email(): void
+    {
+        $this->actingAs(User::factory()->unverified()->create());
+
+        $this->get('/dashboard')->assertRedirect(route('verification.notice'));
+        $this->get('/exercises')->assertRedirect(route('verification.notice'));
+        $this->get('/workouts')->assertRedirect(route('verification.notice'));
+    }
+
+    public function test_verification_notification_can_be_resent(): void
+    {
+        Notification::fake();
+
+        $user = User::factory()->unverified()->create();
+
+        $this->actingAs($user)
+            ->post(route('verification.send'))
+            ->assertRedirect()
+            ->assertSessionHas('status', 'Verification link sent.');
+
+        Notification::assertSentTo($user, VerifyEmail::class);
+    }
+
+    public function test_login_route_is_rate_limited(): void
+    {
+        config()->set('workout_memory.rate_limits.login_per_minute', 1);
+        config()->set('workout_memory.rate_limits.login_email_per_minute', 1);
+
+        User::factory()->create([
+            'email' => 'michele@example.com',
+            'password' => Hash::make('very-secure-password'),
+        ]);
+
+        $this->post(route('login.store'), [
+            'email' => 'michele@example.com',
+            'password' => 'wrong-password',
+        ])->assertSessionHasErrors('email');
+
+        $this->post(route('login.store'), [
+            'email' => 'michele@example.com',
+            'password' => 'wrong-password',
+        ])->assertStatus(429);
     }
 
     private function bootUrlProviderFor(string $url): void
