@@ -8,6 +8,18 @@
     "category": "LIFESTYLE"
   },
   "tools": {
+    "get_workout_memory_help": {
+      "annotations": {
+        "readOnlyHint": true,
+        "openWorldHint": false,
+        "destructiveHint": false
+      },
+      "justifications": {
+        "read_only_justification": "Only returns quickstart guidance and does not read or change workout records.",
+        "open_world_justification": "Does not publish content or modify any third-party or public system.",
+        "destructive_justification": "Does not delete, overwrite, revoke, or irreversibly change data."
+      }
+    },
     "get_user_context": {
       "annotations": {
         "readOnlyHint": true,
@@ -238,6 +250,14 @@
     }
   },
   "test_cases": [
+    {
+      "description": "Show quickstart help for a new user and explain old-session import.",
+      "user_prompt": "I just connected Workout Memory. What can I do, and can I add old workouts from my notes or a CSV?",
+      "file_attachment_urls": null,
+      "tools_triggered": "get_workout_memory_help",
+      "expected_output": "Explains live logging, completed workout logging, and adding previous sessions by pasting notes or CSV-like data for the assistant to split into normal dated workout logs.",
+      "expected_output_url": null
+    },
     {
       "description": "Log a mixed completed workout from natural language.",
       "user_prompt": "Log today's workout: 45 minutes of spinning, 20 minutes of yoga flow, and 10 minutes of mobility.",
