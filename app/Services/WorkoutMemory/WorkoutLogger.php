@@ -15,6 +15,7 @@ class WorkoutLogger
         private readonly TrainingSummaryService $summaries,
         private readonly WorkoutExerciseWriter $exerciseWriter,
         private readonly WorkoutSessionManager $sessions,
+        private readonly WorkoutSessionNamer $namer,
     ) {}
 
     /**
@@ -91,6 +92,8 @@ class WorkoutLogger
             foreach (array_values($input['exercises'] ?? []) as $index => $exerciseInput) {
                 $outcomes[] = $this->exerciseWriter->createWorkoutExercise($user, $session, $exerciseInput, $index + 1)['outcome'];
             }
+
+            $this->namer->applyGeneratedNameIfPlaceholder($session);
 
             $session->changeEvents()->create([
                 'user_id' => $user->id,

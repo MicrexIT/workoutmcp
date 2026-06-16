@@ -62,6 +62,32 @@ class DebugWorkoutUiTest extends TestCase
             ->assertDontSee('Mistaken workout');
     }
 
+    public function test_workout_detail_formats_duration_seconds_for_display(): void
+    {
+        $exercise = Exercise::query()->where('name', 'Plank')->firstOrFail();
+        $logged = app(WorkoutLogger::class)->log($this->user, [
+            'name' => 'Timed holds',
+            'raw_input' => 'plank for 45 seconds, 65 seconds, and 3661 seconds',
+            'exercises' => [[
+                'exercise_id' => $exercise->id,
+                'raw_phrase' => 'plank',
+                'sets' => [
+                    ['duration_seconds' => 45],
+                    ['duration_seconds' => 65],
+                    ['duration_seconds' => 3661],
+                ],
+            ]],
+        ]);
+
+        $this->assertFalse($logged['refused']);
+
+        $this->get(route('workouts.show', $logged['saved_session']['id']))
+            ->assertOk()
+            ->assertSee('45 seconds')
+            ->assertSee('1 minute 5 seconds')
+            ->assertSee('1 hour 1 minute 1 second');
+    }
+
     private function logWorkout(string $name): int
     {
         $exercise = Exercise::query()->where('name', 'Ring Dip')->firstOrFail();

@@ -18,6 +18,7 @@ class WorkoutSessionManager
         private readonly UnitNormalizer $unitNormalizer,
         private readonly TrainingSummaryService $summaries,
         private readonly WorkoutExerciseWriter $exerciseWriter,
+        private readonly WorkoutSessionNamer $namer,
     ) {}
 
     /**
@@ -191,6 +192,11 @@ class WorkoutSessionManager
             /** @var WorkoutSession $session */
             $session = $target['session'];
             ['workout_exercise' => $workoutExercise, 'outcome' => $outcome] = $this->exerciseWriter->createWorkoutExercise($user, $session, $exerciseInput);
+
+            if ($session->status === 'completed') {
+                $this->namer->applyGeneratedNameIfPlaceholder($session);
+            }
+
             $event = $this->recordEvent($user, $session, 'exercise_appended', $input, [
                 'workout_exercise_id' => $workoutExercise->id,
                 'exercise_id' => $workoutExercise->exercise_id,
@@ -263,6 +269,8 @@ class WorkoutSessionManager
             }
 
             $session->update($updates);
+            $this->namer->applyGeneratedNameIfPlaceholder($session);
+
             $event = $this->recordEvent($user, $session, 'finished', $input, [
                 'raw_input' => $input['raw_input'] ?? null,
                 'perceived_effort' => $input['perceived_effort'] ?? null,
@@ -532,6 +540,8 @@ class WorkoutSessionManager
             'status' => 'completed',
             'completed_at' => $completedAt,
         ]);
+
+        $this->namer->applyGeneratedNameIfPlaceholder($session);
 
         $this->recordEvent($user, $session, 'auto_finished', [], [
             'reason' => 'In-progress session was inactive past the stale window and was auto-completed.',

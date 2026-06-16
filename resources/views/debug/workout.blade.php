@@ -64,7 +64,7 @@
                                 <td class="border-b border-chalk/5 px-3 py-2 font-mono text-xs text-volt">{{ $set['set_number'] }}</td>
                                 <td class="border-b border-chalk/5 px-3 py-2 font-mono">{{ $set['reps'] }}</td>
                                 <td class="border-b border-chalk/5 px-3 py-2 font-mono">{{ $set['load_kg'] }}</td>
-                                <td class="border-b border-chalk/5 px-3 py-2 font-mono text-chalk-dim">{{ $set['duration_seconds'] }}</td>
+                                <td class="border-b border-chalk/5 px-3 py-2 font-mono text-chalk-dim">{{ $set['duration_display'] }}</td>
                                 <td class="border-b border-chalk/5 px-3 py-2 font-mono text-chalk-dim">{{ $set['distance_meters'] }}</td>
                                 <td class="border-b border-chalk/5 px-3 py-2 text-xs text-chalk-dim">{{ $set['notes'] ?? $set['raw_set_text'] }}</td>
                             </tr>

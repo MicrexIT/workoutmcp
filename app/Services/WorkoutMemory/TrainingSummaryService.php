@@ -8,9 +8,15 @@ use App\Models\WorkoutExercise;
 use App\Models\WorkoutSession;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Collection;
 
 class TrainingSummaryService
 {
+    public function __construct(
+        private readonly WorkoutSessionNamer $namer,
+        private readonly WorkoutDurationFormatter $durations,
+    ) {}
+
     /**
      * @return array<string, mixed>
      */
@@ -20,7 +26,7 @@ class TrainingSummaryService
 
         return [
             'id' => $session->id,
-            'name' => $session->name,
+            'name' => $this->namer->displayName($session),
             'kind' => $session->kind,
             'status' => $session->status,
             'source' => $session->source,
@@ -62,6 +68,7 @@ class TrainingSummaryService
                         'load_kg' => $set->load_kg,
                         'load_type' => $set->load_type,
                         'duration_seconds' => $set->duration_seconds,
+                        'duration_display' => $this->durations->human($set->duration_seconds),
                         'distance_meters' => $set->distance_meters,
                         'rpe' => $set->rpe,
                         'rir' => $set->rir,
@@ -90,7 +97,7 @@ class TrainingSummaryService
             ->get()
             ->map(fn (WorkoutSession $session): array => [
                 'id' => $session->id,
-                'name' => $session->name,
+                'name' => $this->namer->displayName($session),
                 'kind' => $session->kind,
                 'started_at' => $session->started_at?->toISOString(),
                 'completed_at' => $session->completed_at?->toISOString(),
@@ -100,6 +107,7 @@ class TrainingSummaryService
                     'loaded_reps' => $session->exercises->flatMap->sets->sum(fn ($set): int => (int) ($set->load_kg !== null ? $set->reps : 0)),
                     'bodyweight_reps' => $session->exercises->flatMap->sets->sum(fn ($set): int => (int) ($set->load_kg === null ? $set->reps : 0)),
                     'duration_seconds' => $session->exercises->flatMap->sets->sum('duration_seconds'),
+                    'duration_display' => $this->durations->human((int) $session->exercises->flatMap->sets->sum('duration_seconds')),
                     'distance_meters' => round((float) $session->exercises->flatMap->sets->sum('distance_meters'), 2),
                 ],
             ])
@@ -140,7 +148,7 @@ class TrainingSummaryService
                 }
             })
             ->when($variantLabel !== null, fn (Builder $builder) => $builder->where('variant_label', $variantLabel))
-            ->with(['session', 'sets'])
+            ->with(['session.exercises', 'sets'])
             ->latest();
 
         $performances = $query->limit($limit)->get();
@@ -159,7 +167,7 @@ class TrainingSummaryService
             'last_performed_at' => $performances->first()?->session?->started_at?->toISOString(),
             'recent_performances' => $performances->map(fn (WorkoutExercise $workoutExercise): array => [
                 'workout_id' => $workoutExercise->workout_session_id,
-                'workout_name' => $workoutExercise->session->name,
+                'workout_name' => $this->namer->displayName($workoutExercise->session),
                 'started_at' => $workoutExercise->session->started_at?->toISOString(),
                 'variant_label' => $workoutExercise->variant_label,
                 'variant_description' => $workoutExercise->variant_description,
@@ -169,6 +177,7 @@ class TrainingSummaryService
                     'reps' => $set->reps,
                     'load_kg' => $set->load_kg,
                     'duration_seconds' => $set->duration_seconds,
+                    'duration_display' => $this->durations->human($set->duration_seconds),
                     'distance_meters' => $set->distance_meters,
                     'rpe' => $set->rpe,
                     'quality_rating' => $set->quality_rating,
@@ -178,12 +187,14 @@ class TrainingSummaryService
                 'reps' => $bestSet->reps,
                 'load_kg' => $bestSet->load_kg,
                 'duration_seconds' => $bestSet->duration_seconds,
+                'duration_display' => $this->durations->human($bestSet->duration_seconds),
                 'distance_meters' => $bestSet->distance_meters,
             ] : null,
             'estimated_volume' => [
                 'loaded_volume_kg_reps' => round((float) $allSets->sum(fn ($set): float => (float) ($set->load_kg ?? 0) * (int) ($set->reps ?? 0)), 2),
                 'total_reps' => (int) $allSets->sum('reps'),
                 'total_duration_seconds' => (int) $allSets->sum('duration_seconds'),
+                'total_duration_display' => $this->durations->human((int) $allSets->sum('duration_seconds')),
                 'total_distance_meters' => round((float) $allSets->sum('distance_meters'), 2),
             ],
             'trend_hints' => $this->trendHints($performances),
@@ -235,7 +246,7 @@ class TrainingSummaryService
                 ->take(5)
                 ->map(fn (WorkoutSession $session): array => [
                     'id' => $session->id,
-                    'name' => $session->name,
+                    'name' => $this->namer->displayName($session),
                     'kind' => $session->kind,
                     'started_at' => $session->started_at?->toISOString(),
                     'perceived_effort' => $session->perceived_effort,
@@ -273,7 +284,7 @@ class TrainingSummaryService
     }
 
     /**
-     * @param  \Illuminate\Support\Collection<int, WorkoutExercise>  $performances
+     * @param  Collection<int, WorkoutExercise>  $performances
      * @return list<string>
      */
     private function trendHints($performances): array
@@ -297,7 +308,7 @@ class TrainingSummaryService
     }
 
     /**
-     * @param  \Illuminate\Support\Collection<int, WorkoutSession>  $sessions
+     * @param  Collection<int, WorkoutSession>  $sessions
      * @return list<string>
      */
     private function notableGaps($sessions): array

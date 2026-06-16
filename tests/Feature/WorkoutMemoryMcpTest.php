@@ -900,6 +900,76 @@ SQL);
         $this->assertSame(1, $summaries->trainingSummary($user)['recent_frequency']['session_count']);
     }
 
+    public function test_completed_workout_uses_exercise_names_when_name_is_placeholder(): void
+    {
+        $user = app(CurrentUserResolver::class)->user();
+        $ringDip = Exercise::query()->where('name', 'Ring Dip')->firstOrFail();
+        $legPress = Exercise::query()->where('name', 'Leg Press')->firstOrFail();
+
+        $logged = app(WorkoutLogger::class)->log($user, [
+            'name' => 'Logged workout',
+            'raw_input' => 'ring dips and leg press',
+            'exercises' => [
+                [
+                    'exercise_id' => $ringDip->id,
+                    'raw_phrase' => 'ring dips',
+                    'sets' => [['reps' => 8]],
+                ],
+                [
+                    'exercise_id' => $legPress->id,
+                    'raw_phrase' => 'leg press',
+                    'sets' => [['reps' => 10, 'load_value' => 100, 'load_unit' => 'kg']],
+                ],
+            ],
+        ]);
+
+        $this->assertFalse($logged['refused']);
+        $this->assertSame('Ring Dip + Leg Press', $logged['saved_session']['name']);
+        $this->assertDatabaseHas('workout_sessions', [
+            'id' => $logged['saved_session']['id'],
+            'name' => 'Ring Dip + Leg Press',
+        ]);
+    }
+
+    public function test_live_workout_placeholder_name_is_replaced_when_finished(): void
+    {
+        $user = app(CurrentUserResolver::class)->user();
+        $manager = app(WorkoutSessionManager::class);
+
+        $started = $manager->start($user, [
+            'idempotency_key' => 'generated-live-name:start',
+        ]);
+
+        $appended = $manager->appendExercise($user, [
+            'raw_input' => 'Log leg press 3x10 at 100kg.',
+            'idempotency_key' => 'generated-live-name:append',
+            'exercise' => [
+                'raw_phrase' => 'leg press',
+                'sets' => array_fill(0, 3, [
+                    'reps' => 10,
+                    'load_value' => 100,
+                    'load_unit' => 'kg',
+                ]),
+            ],
+        ]);
+
+        $finished = $manager->finish($user, [
+            'idempotency_key' => 'generated-live-name:finish',
+        ]);
+
+        $this->assertFalse($started['refused']);
+        $this->assertFalse($appended['refused']);
+        $this->assertFalse($finished['refused']);
+        $this->assertSame('Workout in progress', $started['active_session']['name']);
+        $this->assertSame('Workout in progress', $appended['session']['name']);
+        $this->assertSame('Leg Press', $finished['session']['name']);
+        $this->assertDatabaseHas('workout_sessions', [
+            'id' => $finished['session']['id'],
+            'name' => 'Leg Press',
+            'status' => 'completed',
+        ]);
+    }
+
     public function test_active_session_collects_story_and_incremental_exercises_idempotently(): void
     {
         $user = app(CurrentUserResolver::class)->user();

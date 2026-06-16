@@ -251,11 +251,27 @@
   },
   "test_cases": [
     {
-      "description": "Show quickstart help for a new user and explain old-session import.",
-      "user_prompt": "I just connected Workout Memory. What can I do, and can I add old workouts from my notes or a CSV?",
+      "description": "Recall seeded recent training and inspect the latest workout.",
+      "user_prompt": "What did I train recently? Show the details for the most recent workout.",
       "file_attachment_urls": null,
-      "tools_triggered": "get_workout_memory_help",
-      "expected_output": "Explains live logging, completed workout logging, and adding previous sessions by pasting notes or CSV-like data for the assistant to split into normal dated workout logs.",
+      "tools_triggered": "list_recent_workouts, get_workout",
+      "expected_output": "Returns recent seeded workout summaries, then shows the latest completed legs workout with exercises and sets.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Update training context, then answer exercise history and planning questions from seeded data.",
+      "user_prompt": "Remember that I use kilograms, want to build strength while maintaining mobility, and have access to a barbell, stationary bike, and yoga mat. Then tell me how my bench press has been trending and what I should keep in mind for my next push workout.",
+      "file_attachment_urls": null,
+      "tools_triggered": "update_user_context, search_exercises, get_exercise_history, get_user_context, get_training_summary",
+      "expected_output": "Updates the user's private durable training context, finds bench press, summarizes the seeded bench history and user context, and gives planning guidance based on stored training data.",
+      "expected_output_url": null
+    },
+    {
+      "description": "Correct a wrong exercise mapping and remember the wording.",
+      "user_prompt": "In my last workout, that was front squat, not back squat. Fix it and remember that when I say that cue, I mean front squat.",
+      "file_attachment_urls": null,
+      "tools_triggered": "list_recent_workouts, get_workout, update_workout, remember_exercise_phrase",
+      "expected_output": "Fetches the seeded latest workout, updates the existing back squat entry in place, stores the phrase mapping when appropriate, and confirms the correction.",
       "expected_output_url": null
     },
     {
@@ -272,30 +288,6 @@
       "file_attachment_urls": null,
       "tools_triggered": "start_workout_session, append_workout_exercise, append_session_story, finish_workout_session",
       "expected_output": "Starts or resumes a live session, appends the exercise and note, completes the session, and returns a concise workout summary.",
-      "expected_output_url": null
-    },
-    {
-      "description": "Recall recent training and inspect one workout.",
-      "user_prompt": "What did I train recently? Show the details for the most recent workout.",
-      "file_attachment_urls": null,
-      "tools_triggered": "list_recent_workouts, get_workout",
-      "expected_output": "Returns recent workout summaries, then shows the selected workout with exercises and sets.",
-      "expected_output_url": null
-    },
-    {
-      "description": "Correct a wrong exercise mapping and remember the wording.",
-      "user_prompt": "In my last workout, that was front squat, not back squat. Fix it and remember that when I say that cue, I mean front squat.",
-      "file_attachment_urls": null,
-      "tools_triggered": "list_recent_workouts, get_workout, update_workout, remember_exercise_phrase",
-      "expected_output": "Fetches the relevant workout IDs, updates the existing entry in place, stores the phrase mapping when appropriate, and confirms the correction.",
-      "expected_output_url": null
-    },
-    {
-      "description": "Answer exercise history and planning context questions.",
-      "user_prompt": "How has my bench press been trending, and what should I keep in mind for my next push workout?",
-      "file_attachment_urls": null,
-      "tools_triggered": "search_exercises, get_exercise_history, get_user_context, get_training_summary",
-      "expected_output": "Finds the exercise, summarizes recent history and user context, and gives planning guidance based on stored workout data.",
       "expected_output_url": null
     },
     {
