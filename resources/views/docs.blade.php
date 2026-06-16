@@ -44,6 +44,7 @@
             <ul class="mt-5 grid gap-3 text-sm leading-relaxed text-chalk-dim sm:grid-cols-2">
                 <li class="border border-chalk/10 bg-ink-raised/70 p-4">Log completed workouts from natural language.</li>
                 <li class="border border-chalk/10 bg-ink-raised/70 p-4">Track live sessions with start, append, note, and finish tools.</li>
+                <li class="border border-chalk/10 bg-ink-raised/70 p-4">Add previous sessions by pasting notes, tables, or CSV-like data for the assistant to split into dated workout logs.</li>
                 <li class="border border-chalk/10 bg-ink-raised/70 p-4">Resolve exercise phrases and remember user corrections.</li>
                 <li class="border border-chalk/10 bg-ink-raised/70 p-4">Return workout history, best efforts when relevant, and training summaries.</li>
                 <li class="border border-chalk/10 bg-ink-raised/70 p-4">Store durable user context such as goals, constraints, and equipment.</li>
@@ -76,7 +77,9 @@
         <section class="border-b border-chalk/10 py-8">
             <h2 class="font-display text-2xl uppercase">Example prompts</h2>
             <ul class="mt-5 flex flex-col gap-3 font-mono text-sm text-chalk-dim">
+                <li>"I am starting a workout now: legs."</li>
                 <li>"Log today's workout: bench press 5x5 at 80 kg, incline dumbbell press 3x10 at 26 kg."</li>
+                <li>"Here are my old training notes. Add each past session to Workout Memory with the dates shown."</li>
                 <li>"Log 45 minutes of spinning and 20 minutes of yoga this morning."</li>
                 <li>"What did I bench last week, and did I set any PRs?"</li>
                 <li>"I meant front squats, not back squats. Fix the last workout and remember that wording."</li>

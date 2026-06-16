@@ -19,10 +19,12 @@ Product site: {{ $publicUrl }}
 
 ## What the server exposes
 
-19 tools for logging and recalling workouts, including: logging completed workouts from natural language, live in-progress sessions (start, append exercises and notes, finish), exercise search and resolution with per-user phrase memory, per-exercise history with best efforts when relevant, training summaries for planning, durable user context (goals, injuries, available equipment), workout update, merge and delete, and revocable public share links for completed workouts (share_workout, on explicit user request only).
+20 tools for logging and recalling workouts, including: quickstart help, logging completed workouts from natural language, live in-progress sessions (start, append exercises and notes, finish), adding previous sessions from pasted notes, tables, or CSV-like data by splitting them into normal per-session workout logs, exercise search and resolution with per-user phrase memory, per-exercise history with best efforts when relevant, training summaries for planning, durable user context (goals, injuries, available equipment), workout update, merge and delete, and revocable public share links for completed workouts (share_workout, on explicit user request only).
 
 ## Notes for agents
 
 - Send raw user phrasing when logging; the server resolves it, prefers existing exercises, and reports assumptions and auto-created exercises in its responses.
+- If the user asks what they can do, appears new, asks for help, or wants to add old notes or CSV-like data, call `get_workout_memory_help`.
+- For pasted old notes, tables, or CSV-like data, parse the content into individual completed sessions and call `log_workout` once per session; there is no separate CSV upload tool.
 - Live sessions auto-finish after 18 hours of inactivity.
 - This file and the landing page at {{ $publicUrl }} are the canonical public references for connecting.

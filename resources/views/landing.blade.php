@@ -356,7 +356,7 @@
                             Can I add old workouts from my notes?
                             <span class="font-mono text-volt transition group-open:rotate-45">+</span>
                         </summary>
-                        <p class="pb-6 text-sm leading-relaxed text-chalk-dim">Yes. After connecting Workout Memory, paste a chunk of your old training notes or a CSV into ChatGPT or Claude and ask it to import them. The assistant can log each past session with the dates you include, so start with a week or month at a time if the file is large.</p>
+                        <p class="pb-6 text-sm leading-relaxed text-chalk-dim">Yes. After connecting Workout Memory, paste a chunk of your old training notes or CSV-like data into ChatGPT or Claude and ask it to add them. The assistant splits the text into normal dated session logs, so start with a week or month at a time if the file is large.</p>
                     </details>
                     <details class="group">
                         <summary class="flex cursor-pointer list-none items-center justify-between gap-6 py-5 font-display text-lg uppercase tracking-wide [&::-webkit-details-marker]:hidden">

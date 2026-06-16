@@ -6,6 +6,7 @@ use App\Mcp\Servers\WorkoutMemoryServer;
 use App\Mcp\Tools\GetCurrentWorkoutSessionTool;
 use App\Mcp\Tools\GetTrainingSummaryTool;
 use App\Mcp\Tools\GetUserContextTool;
+use App\Mcp\Tools\GetWorkoutMemoryHelpTool;
 use App\Mcp\Tools\ListRecentWorkoutsTool;
 use App\Mcp\Tools\RememberExercisePhraseTool;
 use App\Mcp\Tools\ResolveExerciseMentionsTool;
@@ -1232,6 +1233,48 @@ SQL);
             ->etc());
     }
 
+    public function test_workout_memory_help_tool_returns_quickstart_modes(): void
+    {
+        WorkoutMemoryServer::tool(GetWorkoutMemoryHelpTool::class)
+            ->assertStructuredContent(fn (AssertableJson $json) => $json
+                ->where('ok', true)
+                ->where('quickstart.modes.live_workout.label', 'Log live exercises while training')
+                ->where('quickstart.modes.completed_workout.label', 'Log a completed workout')
+                ->where('quickstart.modes.bulk_previous_sessions.label', 'Add past sessions from notes or CSV')
+                ->has('quickstart.modes.corrections')
+                ->has('quickstart.modes.history_and_planning')
+                ->has('quickstart.suggested_first_messages')
+                ->has('important_notes')
+                ->etc());
+    }
+
+    public function test_user_context_surfaces_onboarding_for_new_and_existing_users(): void
+    {
+        $user = app(CurrentUserResolver::class)->user();
+
+        WorkoutMemoryServer::tool(GetUserContextTool::class)
+            ->assertStructuredContent(fn (AssertableJson $json) => $json
+                ->where('ok', true)
+                ->where('onboarding.is_new_user', true)
+                ->where('onboarding.help_tool', 'get_workout_memory_help')
+                ->where('onboarding.suggested_next_actions.2', 'Paste previous notes or CSV-like data and ask the assistant to add past sessions.')
+                ->etc());
+
+        $logged = app(WorkoutLogger::class)->log($user, [
+            'raw_input' => 'ring dips 3x8',
+            'exercises' => [['raw_phrase' => 'ring dips', 'sets' => array_fill(0, 3, ['reps' => 8])]],
+        ]);
+
+        $this->assertFalse($logged['refused']);
+
+        WorkoutMemoryServer::tool(GetUserContextTool::class)
+            ->assertStructuredContent(fn (AssertableJson $json) => $json
+                ->where('ok', true)
+                ->where('onboarding.is_new_user', false)
+                ->where('onboarding.suggested_next_actions.2', 'Paste previous notes or CSV-like data and ask the assistant to add past sessions.')
+                ->etc());
+    }
+
     public function test_update_workout_merges_wrongly_separate_workout(): void
     {
         $user = app(CurrentUserResolver::class)->user();
@@ -1589,6 +1632,7 @@ SQL);
         $registeredToolCount = count((new \ReflectionClass(WorkoutMemoryServer::class))->getProperty('tools')->getDefaultValue());
 
         $this->assertCount($registeredToolCount, $toolNames);
+        $this->assertContains('get_workout_memory_help', $toolNames);
         $this->assertContains('update_workout', $toolNames);
         $this->assertContains('delete_workout', $toolNames);
         $this->assertContains('share_workout', $toolNames);
@@ -1707,9 +1751,16 @@ SQL);
 
     public function test_mcp_server_tools_return_structured_content(): void
     {
+        WorkoutMemoryServer::tool(GetWorkoutMemoryHelpTool::class)
+            ->assertStructuredContent(fn (AssertableJson $json) => $json
+                ->where('ok', true)
+                ->has('quickstart')
+                ->etc());
+
         WorkoutMemoryServer::tool(GetUserContextTool::class)
             ->assertStructuredContent(fn (AssertableJson $json) => $json
                 ->where('ok', true)
+                ->has('onboarding')
                 ->has('user_context')
                 ->etc());
 

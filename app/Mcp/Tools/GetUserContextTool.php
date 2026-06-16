@@ -27,9 +27,20 @@ class GetUserContextTool extends Tool
     {
         $user = $this->currentUser($users);
         $profile = $user->profile;
+        $availableEquipment = $profile?->available_equipment ?? [];
+        $isNewUser = ! $user->workoutSessions()
+            ->where('status', 'completed')
+            ->exists();
+        $profileNeedsSetup = blank($profile?->goals) || $availableEquipment === [];
 
         return $this->structured([
             'stale_active_session' => $sessions->staleActiveSessionNotice($user),
+            'onboarding' => [
+                'is_new_user' => $isNewUser,
+                'profile_needs_setup' => $profileNeedsSetup,
+                'help_tool' => 'get_workout_memory_help',
+                'suggested_next_actions' => $this->suggestedNextActions($isNewUser, $profileNeedsSetup),
+            ],
             'user_context' => [
                 'name' => $user->name,
                 'email' => $user->email,
@@ -38,7 +49,7 @@ class GetUserContextTool extends Tool
                 'timezone' => $profile?->timezone ?? 'UTC',
                 'goals' => $profile?->goals,
                 'injuries_constraints' => $profile?->injuries_constraints,
-                'available_equipment' => $profile?->available_equipment ?? [],
+                'available_equipment' => $availableEquipment,
                 'notes' => $profile?->notes,
             ],
         ], 'User context loaded.');
@@ -47,5 +58,29 @@ class GetUserContextTool extends Tool
     public function schema(JsonSchema $schema): array
     {
         return [];
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function suggestedNextActions(bool $isNewUser, bool $profileNeedsSetup): array
+    {
+        $actions = $isNewUser
+            ? [
+                'Start a live workout by saying what you are training now.',
+                'Log a completed workout by describing the whole session in one message.',
+                'Paste previous notes or CSV-like data and ask the assistant to add past sessions.',
+            ]
+            : [
+                'Ask for recent workout history or a training summary before planning.',
+                'Correct any mistaken workout in place instead of logging a duplicate.',
+                'Paste previous notes or CSV-like data and ask the assistant to add past sessions.',
+            ];
+
+        if ($profileNeedsSetup) {
+            $actions[] = 'Share durable goals, constraints, units, timezone, and available equipment.';
+        }
+
+        return $actions;
     }
 }
