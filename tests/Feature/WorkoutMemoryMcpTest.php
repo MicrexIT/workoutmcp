@@ -2,6 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Mcp\Prompts\BulkWorkoutImportPrompt;
+use App\Mcp\Prompts\TrainingAnalysisPrompt;
+use App\Mcp\Prompts\WorkoutMemoryGuidancePrompt;
 use App\Mcp\Servers\WorkoutMemoryServer;
 use App\Mcp\Tools\GetCurrentWorkoutSessionTool;
 use App\Mcp\Tools\GetTrainingSummaryTool;
@@ -28,6 +31,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\JsonSchema\JsonSchemaTypeFactory;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\Fluent\AssertableJson;
+use Laravel\Mcp\Server\Methods\ListPrompts;
 use Laravel\Mcp\Server\Methods\ListTools;
 use Laravel\Mcp\Server\Transport\FakeTransporter;
 use Laravel\Mcp\Transport\JsonRpcRequest;
@@ -1316,6 +1320,69 @@ SQL);
                 ->has('quickstart.suggested_first_messages')
                 ->has('important_notes')
                 ->etc());
+    }
+
+    public function test_prompt_list_response_contains_registered_prompts(): void
+    {
+        $server = app()->make(WorkoutMemoryServer::class, ['transport' => new FakeTransporter]);
+        $response = (new ListPrompts)->handle(
+            new JsonRpcRequest('prompts-list', 'prompts/list', []),
+            $server->createContext(),
+        )->toArray();
+
+        $prompts = collect($response['result']['prompts']);
+        $promptNames = $prompts->pluck('name')->all();
+        $registeredPromptCount = count((new \ReflectionClass(WorkoutMemoryServer::class))->getProperty('prompts')->getDefaultValue());
+        $bulkPrompt = $prompts->firstWhere('name', 'bulk_workout_import_setup');
+
+        $this->assertCount($registeredPromptCount, $promptNames);
+        $this->assertContains('workout_memory_guidance', $promptNames);
+        $this->assertContains('bulk_workout_import_setup', $promptNames);
+        $this->assertContains('training_analysis_review', $promptNames);
+        $this->assertNotNull($bulkPrompt);
+        $this->assertSame('Bulk Workout Import Setup', $bulkPrompt['title']);
+        $this->assertSame('source_data', $bulkPrompt['arguments'][0]['name']);
+        $this->assertFalse($bulkPrompt['arguments'][0]['required']);
+        $this->assertArrayNotHasKey('nextCursor', $response['result']);
+    }
+
+    public function test_workout_memory_guidance_prompt_orients_without_taking_action(): void
+    {
+        WorkoutMemoryServer::prompt(WorkoutMemoryGuidancePrompt::class, [
+            'user_goal' => 'I want to understand how to use this with ChatGPT.',
+        ])->assertOk()
+            ->assertSee([
+                'call get_workout_memory_help',
+                'Tailor the guidance to this user goal',
+                'Do not log, update, delete, or share anything',
+            ]);
+    }
+
+    public function test_bulk_workout_import_prompt_asks_for_missing_source_data(): void
+    {
+        WorkoutMemoryServer::prompt(BulkWorkoutImportPrompt::class)
+            ->assertOk()
+            ->assertSee([
+                'No source data is present yet',
+                'Ask the user to paste their old workout notes',
+                'use log_workout once per session',
+                'There is no separate bulk upload tool',
+            ]);
+    }
+
+    public function test_training_analysis_prompt_requires_data_backed_recommendations(): void
+    {
+        WorkoutMemoryServer::prompt(TrainingAnalysisPrompt::class, [
+            'scope' => 'last 6 weeks',
+            'question_or_goal' => 'Find weak spots and suggest improvements.',
+        ])->assertOk()
+            ->assertSee([
+                'Call get_user_context',
+                'Call get_training_summary',
+                'weak spots',
+                '3 to 6 practical next steps',
+                'Do not diagnose injuries',
+            ]);
     }
 
     public function test_user_context_surfaces_onboarding_for_new_and_existing_users(): void

@@ -2,6 +2,9 @@
 
 namespace App\Mcp\Servers;
 
+use App\Mcp\Prompts\BulkWorkoutImportPrompt;
+use App\Mcp\Prompts\TrainingAnalysisPrompt;
+use App\Mcp\Prompts\WorkoutMemoryGuidancePrompt;
 use App\Mcp\Tools\AppendSessionStoryTool;
 use App\Mcp\Tools\AppendWorkoutExerciseTool;
 use App\Mcp\Tools\CreateExerciseTool;
@@ -62,6 +65,8 @@ class WorkoutMemoryServer extends Server
     ];
 
     protected array $prompts = [
-        //
+        WorkoutMemoryGuidancePrompt::class,
+        BulkWorkoutImportPrompt::class,
+        TrainingAnalysisPrompt::class,
     ];
 }
