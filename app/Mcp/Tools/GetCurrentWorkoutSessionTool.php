@@ -32,4 +32,19 @@ class GetCurrentWorkoutSessionTool extends Tool
     {
         return [];
     }
+
+    public function outputSchema(JsonSchema $schema): array
+    {
+        return $this->baseOutputSchema($schema, [
+            'active_session' => $this->workoutSessionSchema($schema)->required()->nullable(),
+            'active_session_is_stale' => $schema->boolean()->required(),
+            'latest_completed_session' => $this->workoutSessionSchema($schema)->required()->nullable(),
+            'append_target_guidance' => $schema->object([
+                'current_live_workout' => $schema->string()->required(),
+                'just_logged_or_last_session' => $schema->string()->required(),
+                'past_completed_workout' => $schema->string()->required(),
+                'stale_or_wrongly_completed' => $schema->string()->required(),
+            ])->required(),
+        ]);
+    }
 }

@@ -52,4 +52,12 @@ class ListRecentWorkoutsTool extends Tool
             'kind' => $schema->string()->nullable(),
         ];
     }
+
+    public function outputSchema(JsonSchema $schema): array
+    {
+        return $this->baseOutputSchema($schema, [
+            'stale_active_session' => $this->staleActiveSessionSchema($schema)->required()->nullable(),
+            'sessions' => $schema->array()->required()->items($this->recentWorkoutSchema($schema)),
+        ]);
+    }
 }

@@ -55,4 +55,11 @@ class ResolveExerciseMentionsTool extends Tool
             'allow_bucket_suggestions' => $schema->boolean()->default(true),
         ];
     }
+
+    public function outputSchema(JsonSchema $schema): array
+    {
+        return $this->baseOutputSchema($schema, [
+            'results' => $schema->array()->required()->items($this->exerciseResolutionResultSchema($schema)),
+        ]);
+    }
 }

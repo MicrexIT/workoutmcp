@@ -9,6 +9,8 @@ use Laravel\Mcp\ResponseFactory;
 
 trait ResolvesWorkoutUser
 {
+    use BuildsWorkoutOutputSchemas;
+
     protected function currentUser(CurrentUserResolver $resolver): User
     {
         return $resolver->user();

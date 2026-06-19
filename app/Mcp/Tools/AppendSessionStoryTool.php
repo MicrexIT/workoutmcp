@@ -65,4 +65,18 @@ class AppendSessionStoryTool extends Tool
             'user_confirmed_current_session' => $schema->boolean()->default(false)->description('Set true after the user confirms an old-looking occurred_at belongs to a live session happening now.'),
         ];
     }
+
+    public function outputSchema(JsonSchema $schema): array
+    {
+        return $this->baseOutputSchema($schema, [
+            'idempotent_replay' => $schema->boolean(),
+            'needs_confirmation' => $schema->boolean(),
+            'confirmation_hint' => $schema->string()->nullable(),
+            'target_resolution' => $schema->string()->nullable(),
+            'auto_finished_stale_session' => $this->workoutSessionSchema($schema)->nullable(),
+            'latest_completed_session' => $this->workoutSessionSchema($schema)->nullable(),
+            'story_event' => $this->workoutEventOutputSchema($schema)->nullable(),
+            'session' => $this->workoutSessionSchema($schema)->nullable(),
+        ]);
+    }
 }

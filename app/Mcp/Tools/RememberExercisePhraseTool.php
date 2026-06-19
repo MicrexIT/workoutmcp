@@ -87,4 +87,20 @@ class RememberExercisePhraseTool extends Tool
             'variant_description' => $schema->string()->nullable(),
         ];
     }
+
+    public function outputSchema(JsonSchema $schema): array
+    {
+        return $this->baseOutputSchema($schema, [
+            'phrase_memory' => $schema->object([
+                'phrase' => $schema->string()->required(),
+                'normalized_phrase' => $schema->string()->required(),
+                'exercise_id' => $schema->integer()->required(),
+                'variant_label' => $schema->string()->required()->nullable(),
+                'variant_description' => $schema->string()->required()->nullable(),
+                'confidence' => $schema->number()->required(),
+                'usage_count' => $schema->integer()->required(),
+            ])->nullable(),
+            'exercise' => $this->exerciseSummarySchema($schema)->nullable(),
+        ]);
+    }
 }

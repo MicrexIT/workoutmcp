@@ -41,4 +41,11 @@ class GetWorkoutTool extends Tool
             'workout_id' => $schema->integer()->required(),
         ];
     }
+
+    public function outputSchema(JsonSchema $schema): array
+    {
+        return $this->baseOutputSchema($schema, [
+            'workout' => $this->workoutSessionSchema($schema)->required()->nullable(),
+        ]);
+    }
 }

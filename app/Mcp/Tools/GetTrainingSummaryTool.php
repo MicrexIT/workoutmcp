@@ -52,4 +52,17 @@ class GetTrainingSummaryTool extends Tool
             'include_buckets' => $schema->boolean()->default(true),
         ];
     }
+
+    public function outputSchema(JsonSchema $schema): array
+    {
+        return $this->baseOutputSchema($schema, [
+            'stale_active_session' => $this->staleActiveSessionSchema($schema)
+                ->required()
+                ->nullable()
+                ->description('Present when an in-progress workout has been idle long enough to need user confirmation.'),
+            'training_summary' => $this->trainingSummarySchema($schema)
+                ->required()
+                ->description('Recent training context for workout planning.'),
+        ]);
+    }
 }

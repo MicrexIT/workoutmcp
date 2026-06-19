@@ -2,6 +2,7 @@
 
 namespace App\Mcp\Tools;
 
+use App\Mcp\Tools\Concerns\BuildsWorkoutOutputSchemas;
 use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Mcp\Response;
 use Laravel\Mcp\ResponseFactory;
@@ -19,6 +20,8 @@ use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 #[IsOpenWorld(false)]
 class GetWorkoutMemoryHelpTool extends Tool
 {
+    use BuildsWorkoutOutputSchemas;
+
     public function handle(): ResponseFactory
     {
         return Response::structured([
@@ -80,5 +83,19 @@ class GetWorkoutMemoryHelpTool extends Tool
     public function schema(JsonSchema $schema): array
     {
         return [];
+    }
+
+    public function outputSchema(JsonSchema $schema): array
+    {
+        return $this->baseOutputSchema($schema, [
+            'quickstart' => $schema->object([
+                'summary' => $schema->string()->required(),
+                'modes' => $schema->object()
+                    ->required()
+                    ->description('Map of workflow mode keys to label, starting prompt, and assistant behavior.'),
+                'suggested_first_messages' => $schema->array()->required()->items($schema->string()),
+            ])->required(),
+            'important_notes' => $schema->array()->required()->items($schema->string()),
+        ]);
     }
 }

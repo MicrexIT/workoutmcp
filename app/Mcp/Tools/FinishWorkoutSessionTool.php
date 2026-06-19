@@ -72,4 +72,17 @@ class FinishWorkoutSessionTool extends Tool
             'source_message_id' => $schema->string()->nullable(),
         ];
     }
+
+    public function outputSchema(JsonSchema $schema): array
+    {
+        return $this->baseOutputSchema($schema, [
+            'idempotent_replay' => $schema->boolean(),
+            'target_resolution' => $schema->string()->nullable(),
+            'finish_event' => $this->workoutEventOutputSchema($schema)->nullable(),
+            'session' => $this->workoutSessionSchema($schema)->nullable(),
+            'latest_completed_session' => $this->workoutSessionSchema($schema)->nullable(),
+            'confirmation_hint' => $schema->string()->nullable(),
+            'sharing' => $this->sharingSchema($schema)->nullable(),
+        ]);
+    }
 }

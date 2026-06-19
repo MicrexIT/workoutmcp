@@ -50,4 +50,15 @@ class DeleteWorkoutTool extends Tool
             'user_confirmed' => $schema->boolean()->required()->description('Must be true, and only after the user explicitly confirmed the deletion.'),
         ];
     }
+
+    public function outputSchema(JsonSchema $schema): array
+    {
+        return $this->baseOutputSchema($schema, [
+            'deleted_workout_id' => $schema->integer()->nullable(),
+            'deletion_summary' => $schema->object([
+                'status' => $schema->string()->required(),
+                'reason' => $schema->string()->required()->nullable(),
+            ])->nullable(),
+        ]);
+    }
 }

@@ -53,4 +53,11 @@ class GetExerciseHistoryTool extends Tool
             'limit' => $schema->integer()->default(10),
         ];
     }
+
+    public function outputSchema(JsonSchema $schema): array
+    {
+        return $this->baseOutputSchema($schema, [
+            'history' => $this->exerciseHistorySchema($schema)->required(),
+        ]);
+    }
 }

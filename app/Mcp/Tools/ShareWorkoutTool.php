@@ -44,4 +44,19 @@ class ShareWorkoutTool extends Tool
             'workout_session_id' => $schema->integer()->nullable()->description('The workout to share, from saved_session.id, session.id, or list_recent_workouts. Omit to share the most recent completed workout.'),
         ];
     }
+
+    public function outputSchema(JsonSchema $schema): array
+    {
+        return $this->baseOutputSchema($schema, [
+            'created' => $schema->boolean(),
+            'share_url' => $schema->string()->nullable(),
+            'share_text' => $schema->string()->nullable(),
+            'shared_workout' => $schema->object([
+                'id' => $schema->integer()->required(),
+                'name' => $schema->string()->required()->nullable(),
+            ])->nullable(),
+            'note' => $schema->string()->nullable(),
+            'confirmation_hint' => $schema->string()->nullable(),
+        ]);
+    }
 }

@@ -99,4 +99,14 @@ class UpdateWorkoutTool extends Tool
             'user_confirmed_destructive_change' => $schema->boolean()->default(false)->description('Required true for remove_exercise, remove_set, and merge_workout. The user\'s own request to delete, replace, or merge counts as confirmation — set true and proceed without re-asking. Ask first only when the removal is your idea rather than something the user asked for.'),
         ];
     }
+
+    public function outputSchema(JsonSchema $schema): array
+    {
+        return $this->baseOutputSchema($schema, [
+            'unresolved_or_ambiguous_items' => $schema->array()->items($this->validationIssueSchema($schema)),
+            'active_session' => $this->workoutSessionSchema($schema)->nullable(),
+            ...$this->resolutionOutcomeProperties($schema),
+            'updated_workout' => $this->workoutSessionSchema($schema)->nullable(),
+        ]);
+    }
 }

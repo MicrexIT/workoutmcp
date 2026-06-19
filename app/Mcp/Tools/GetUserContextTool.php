@@ -60,6 +60,11 @@ class GetUserContextTool extends Tool
         return [];
     }
 
+    public function outputSchema(JsonSchema $schema): array
+    {
+        return $this->baseOutputSchema($schema, $this->userContextProperties($schema));
+    }
+
     /**
      * @return array<int, string>
      */

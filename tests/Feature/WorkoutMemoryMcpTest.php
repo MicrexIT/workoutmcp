@@ -1815,6 +1815,51 @@ SQL);
         foreach (glob(app_path('Mcp/Tools/*.php')) as $file) {
             $class = 'App\\Mcp\\Tools\\'.basename($file, '.php');
             $this->assertIsArray(app($class)->schema($schema), "{$class} schema failed to build");
+            $this->assertIsArray(app($class)->outputSchema($schema), "{$class} output schema failed to build");
+
+            $tool = app($class)->toArray();
+            $this->assertArrayHasKey('outputSchema', $tool, "{$class} is missing an advertised output schema.");
+            $this->assertArrayHasKey('ok', $tool['outputSchema']['properties'], "{$class} output schema is missing ok.");
+            $this->assertArrayHasKey('message', $tool['outputSchema']['properties'], "{$class} output schema is missing message.");
+            $this->assertContains('ok', $tool['outputSchema']['required'] ?? [], "{$class} output schema must require ok.");
+            $this->assertContains('message', $tool['outputSchema']['required'] ?? [], "{$class} output schema must require message.");
+        }
+    }
+
+    public function test_training_summary_tool_advertises_output_schema(): void
+    {
+        $tool = app(GetTrainingSummaryTool::class)->toArray();
+
+        $this->assertArrayHasKey('outputSchema', $tool);
+
+        $outputSchema = $tool['outputSchema'];
+
+        $this->assertSame('object', $outputSchema['type']);
+        $this->assertEqualsCanonicalizing(
+            ['ok', 'message', 'stale_active_session', 'training_summary'],
+            $outputSchema['required'],
+        );
+
+        foreach (['ok', 'message', 'stale_active_session', 'training_summary'] as $property) {
+            $this->assertArrayHasKey($property, $outputSchema['properties']);
+        }
+
+        $this->assertSame(['object', 'null'], $outputSchema['properties']['stale_active_session']['type']);
+
+        $summaryProperties = $outputSchema['properties']['training_summary']['properties'];
+
+        foreach ([
+            'since',
+            'focus',
+            'recent_frequency',
+            'muscle_exposure',
+            'equipment_exposure',
+            'notable_gaps',
+            'recent_hard_sessions',
+            'exercises_to_avoid_repeating_too_soon',
+            'recent_skill_practice_and_bucketed_drill_notes',
+        ] as $property) {
+            $this->assertArrayHasKey($property, $summaryProperties);
         }
     }
 

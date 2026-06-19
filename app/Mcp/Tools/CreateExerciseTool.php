@@ -80,4 +80,15 @@ class CreateExerciseTool extends Tool
             'phrase_to_remember' => $schema->string()->nullable(),
         ];
     }
+
+    public function outputSchema(JsonSchema $schema): array
+    {
+        return $this->baseOutputSchema($schema, [
+            'created_exercise' => $this->detailedExerciseSchema($schema)->nullable(),
+            'similar_existing_exercises' => $schema->array()->items($this->resolverCandidateSchema($schema)),
+            'warning' => $schema->string()->nullable(),
+            'recommended_existing_exercise' => $this->exerciseSummarySchema($schema)->nullable(),
+            'recommended_bucket_exercise' => $this->exerciseSummarySchema($schema)->nullable(),
+        ]);
+    }
 }

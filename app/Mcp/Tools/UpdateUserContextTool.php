@@ -57,4 +57,9 @@ class UpdateUserContextTool extends Tool
             'notes' => $schema->string()->nullable()->description('Other stable planning notes.'),
         ];
     }
+
+    public function outputSchema(JsonSchema $schema): array
+    {
+        return $this->baseOutputSchema($schema, $this->userContextProperties($schema));
+    }
 }

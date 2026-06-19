@@ -55,4 +55,15 @@ class StartWorkoutSessionTool extends Tool
             'source_message_id' => $schema->string()->nullable(),
         ];
     }
+
+    public function outputSchema(JsonSchema $schema): array
+    {
+        return $this->baseOutputSchema($schema, [
+            'idempotent_replay' => $schema->boolean(),
+            'session_was_created' => $schema->boolean(),
+            'session_was_resumed' => $schema->boolean(),
+            'auto_finished_stale_session' => $this->workoutSessionSchema($schema)->nullable(),
+            'active_session' => $this->workoutSessionSchema($schema)->nullable(),
+        ]);
+    }
 }

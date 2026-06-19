@@ -153,4 +153,25 @@ class LogWorkoutTool extends Tool
             ]))->required(),
         ];
     }
+
+    public function outputSchema(JsonSchema $schema): array
+    {
+        return $this->baseOutputSchema($schema, [
+            'idempotent_replay' => $schema->boolean(),
+            'possible_duplicate' => $schema->object([
+                'workout_id' => $schema->integer()->required(),
+                'message' => $schema->string()->required(),
+            ])->nullable(),
+            'needs_confirmation' => $schema->boolean(),
+            'active_session' => $this->workoutSessionSchema($schema)->nullable(),
+            'active_session_is_stale' => $schema->boolean(),
+            'confirmation_hint' => $schema->string()->nullable(),
+            'auto_finished_stale_session' => $this->workoutSessionSchema($schema)->nullable(),
+            'unresolved_or_ambiguous_items' => $schema->array()->items($this->validationIssueSchema($schema)),
+            ...$this->resolutionOutcomeProperties($schema),
+            'saved_session' => $this->workoutSessionSchema($schema)->nullable(),
+            'normalized_summary' => $this->normalizedSummarySchema($schema)->nullable(),
+            'sharing' => $this->sharingSchema($schema)->nullable(),
+        ]);
+    }
 }

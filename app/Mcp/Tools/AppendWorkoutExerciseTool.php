@@ -140,4 +140,21 @@ class AppendWorkoutExerciseTool extends Tool
             ])->required(),
         ];
     }
+
+    public function outputSchema(JsonSchema $schema): array
+    {
+        return $this->baseOutputSchema($schema, [
+            'idempotent_replay' => $schema->boolean(),
+            'needs_confirmation' => $schema->boolean(),
+            'confirmation_hint' => $schema->string()->nullable(),
+            'target_resolution' => $schema->string()->nullable(),
+            'auto_finished_stale_session' => $this->workoutSessionSchema($schema)->nullable(),
+            'latest_completed_session' => $this->workoutSessionSchema($schema)->nullable(),
+            'append_event' => $this->workoutEventOutputSchema($schema)->nullable(),
+            'appended_exercise_id' => $schema->integer()->nullable(),
+            'unresolved_or_ambiguous_items' => $schema->array()->items($this->validationIssueSchema($schema)),
+            ...$this->resolutionOutcomeProperties($schema),
+            'session' => $this->workoutSessionSchema($schema)->nullable(),
+        ]);
+    }
 }

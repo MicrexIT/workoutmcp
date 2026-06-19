@@ -55,4 +55,18 @@ class SearchExercisesTool extends Tool
             'limit' => $schema->integer()->default(10),
         ];
     }
+
+    public function outputSchema(JsonSchema $schema): array
+    {
+        return $this->baseOutputSchema($schema, [
+            'resolution_id' => $schema->string()->required()->nullable(),
+            'query' => $schema->string()->required(),
+            'matches' => $schema->array()->required()->items($this->exerciseSummarySchema($schema)),
+            'candidates' => $schema->array()->required()->items($this->resolverCandidateSchema($schema)),
+            'creating_new_exercise_recommended' => $schema->boolean()->required(),
+            'duplicate_risk' => $schema->string()->required(),
+            'evidence_persisted' => $schema->boolean()->required(),
+            'evidence_persistence_warning' => $schema->string()->required()->nullable(),
+        ]);
+    }
 }
