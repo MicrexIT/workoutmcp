@@ -2,6 +2,7 @@
 
 namespace App\Mcp\Tools;
 
+use App\Mcp\Tools\Concerns\NormalizesWorkoutSetPayloads;
 use App\Mcp\Tools\Concerns\ResolvesWorkoutUser;
 use App\Services\WorkoutMemory\CurrentUserResolver;
 use App\Services\WorkoutMemory\WorkoutLogger;
@@ -17,17 +18,20 @@ use Laravel\Mcp\Server\Tools\Annotations\IsOpenWorld;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 
 #[Name('log_workout')]
-#[Description('Save a completed workout in one call. Always send each entry\'s raw_phrase; exercise_id and resolution_id are optional hints (copy log_entry_template from resolve_exercise_mentions verbatim when available). Never invent exercise_id values and never use an entry\'s position number as its id — when unsure, omit exercise_id and let the server resolve raw_phrase itself: it prefers existing exercises and buckets, and as a last resort creates a clearly-flagged exercise reported in auto_created_exercises — entries are never refused or dropped for resolution reasons. Hints that contradict the raw_phrase evidence are ignored and reported in ignored_exercise_hints. Surface assumed_matches, ignored_exercise_hints, and auto_created_exercises to the user and correct with remember_exercise_phrase or update_workout. If an in-progress session is open and this workout overlaps it, the server refuses with needs_confirmation: either append/finish the live session, or retry with user_confirmed_separate_workout=true.')]
+#[Description('Save a completed workout in one call. Always send each entry\'s raw_phrase; exercise_id and resolution_id are optional hints (copy log_entry_template from resolve_exercise_mentions verbatim when available). For repeated identical sets such as 5x5 at 100 kg, prefer compact fields on the exercise entry: set_count, reps, load_value, and load_unit; use sets only when sets differ. Never invent exercise_id values and never use an entry\'s position number as its id — when unsure, omit exercise_id and let the server resolve raw_phrase itself: it prefers existing exercises and buckets, and as a last resort creates a clearly-flagged exercise reported in auto_created_exercises — entries are never refused or dropped for resolution reasons. Hints that contradict the raw_phrase evidence are ignored and reported in ignored_exercise_hints. Surface assumed_matches, ignored_exercise_hints, and auto_created_exercises to the user and correct with remember_exercise_phrase or update_workout. If an in-progress session is open and this workout overlaps it, the server refuses with needs_confirmation: either append/finish the live session, or retry with user_confirmed_separate_workout=true.')]
 #[IsReadOnly(false)]
 #[IsDestructive(false)]
 #[IsOpenWorld(false)]
 #[IsIdempotent]
 class LogWorkoutTool extends Tool
 {
+    use NormalizesWorkoutSetPayloads;
     use ResolvesWorkoutUser;
 
     public function handle(Request $request, CurrentUserResolver $users, WorkoutLogger $logger): ResponseFactory
     {
+        $request->setArguments($this->normalizeWorkoutSetPayloads($request->all()));
+
         $validated = $request->validate([
             'name' => ['sometimes', 'nullable', 'string', 'max:160'],
             'occurred_at' => ['sometimes', 'nullable', 'string'],
@@ -110,6 +114,23 @@ class LogWorkoutTool extends Tool
                 'variant_description' => $schema->string()->nullable(),
                 'prescription' => $schema->string()->nullable(),
                 'notes' => $schema->string()->nullable(),
+                'set_count' => $schema->integer()->min(1)->max(100)->nullable()->description('Compact repeated-set shortcut. For "5x5 at 100 kg", send set_count=5, reps=5, load_value=100, load_unit="kg" instead of listing five identical sets. Use sets when sets differ.'),
+                'reps' => $schema->integer()->nullable()->description('Compact shortcut: reps per set when set_count is present.'),
+                'load_value' => $schema->number()->nullable()->description('Compact shortcut: load per set when set_count is present.'),
+                'load_unit' => $schema->string()->enum(['kg', 'lb'])->nullable()->description('Compact shortcut: load unit for load_value.'),
+                'weight_kg' => $schema->number()->nullable()->description('Compact shortcut alias for load_value in kilograms. Prefer load_value plus load_unit when possible.'),
+                'weight_lb' => $schema->number()->nullable()->description('Compact shortcut alias for load_value in pounds. Prefer load_value plus load_unit when possible.'),
+                'load_type' => $schema->string()->enum(['implement', 'external', 'assistance', 'bodyweight', 'unknown'])->nullable()->description('Compact shortcut: load type for each repeated set.'),
+                'duration_seconds' => $schema->integer()->nullable()->description('Compact shortcut: seconds per repeated set.'),
+                'duration_minutes' => $schema->number()->nullable()->description('Compact shortcut: minutes per repeated set; converted to duration_seconds.'),
+                'distance_value' => $schema->number()->nullable()->description('Compact shortcut: distance per repeated set.'),
+                'distance_unit' => $schema->string()->enum(['m', 'km', 'mi'])->nullable()->description('Compact shortcut: distance unit.'),
+                'rpe' => $schema->number()->nullable(),
+                'rir' => $schema->number()->nullable(),
+                'side' => $schema->string()->enum(['left', 'right', 'both', 'alternating'])->nullable(),
+                'success' => $schema->boolean()->nullable(),
+                'quality_rating' => $schema->integer()->nullable()->description('Compact shortcut: 1-5 movement quality.'),
+                'is_warmup' => $schema->boolean()->nullable(),
                 'sets' => $schema->array()->items($schema->object([
                     'set_number' => $schema->integer()->nullable(),
                     'reps' => $schema->integer()->nullable(),
@@ -128,7 +149,7 @@ class LogWorkoutTool extends Tool
                     'custom_metrics' => $schema->object([])->nullable(),
                     'raw_set_text' => $schema->string()->nullable(),
                     'notes' => $schema->string()->nullable(),
-                ]))->required(),
+                ]))->description('Detailed set rows. Use this for uneven sets; for identical repeated sets, prefer set_count plus reps/load/duration fields.'),
             ]))->required(),
         ];
     }

@@ -6,11 +6,13 @@ use App\Mcp\Prompts\BulkWorkoutImportPrompt;
 use App\Mcp\Prompts\TrainingAnalysisPrompt;
 use App\Mcp\Prompts\WorkoutMemoryGuidancePrompt;
 use App\Mcp\Servers\WorkoutMemoryServer;
+use App\Mcp\Tools\AppendWorkoutExerciseTool;
 use App\Mcp\Tools\GetCurrentWorkoutSessionTool;
 use App\Mcp\Tools\GetTrainingSummaryTool;
 use App\Mcp\Tools\GetUserContextTool;
 use App\Mcp\Tools\GetWorkoutMemoryHelpTool;
 use App\Mcp\Tools\ListRecentWorkoutsTool;
+use App\Mcp\Tools\LogWorkoutTool;
 use App\Mcp\Tools\RememberExercisePhraseTool;
 use App\Mcp\Tools\ResolveExerciseMentionsTool;
 use App\Mcp\Tools\SearchExercisesTool;
@@ -230,6 +232,79 @@ SQL);
             'exercise_id' => $exercise->id,
             'normalized_phrase' => ExerciseResolver::normalize('weighted rings MU'),
         ]);
+    }
+
+    public function test_log_workout_tool_accepts_compact_repeated_set_payloads(): void
+    {
+        WorkoutMemoryServer::tool(LogWorkoutTool::class, [
+            'name' => '5x5 Strength Session',
+            'raw_input' => 'Like my training of today, it was 5 times 5 of back squats with 100 kilograms, then I did 5 times 5 of barbell bench press with 80 kilograms, then I did 5 times 5 of standing overhead press with 40 kilograms.',
+            'exercises' => [
+                [
+                    'raw_phrase' => 'back squats',
+                    'set_count' => 5,
+                    'reps' => 5,
+                    'load_value' => 100,
+                    'load_unit' => 'kg',
+                ],
+                [
+                    'raw_phrase' => 'barbell bench press',
+                    'set_count' => 5,
+                    'reps' => 5,
+                    'load_value' => 80,
+                    'load_unit' => 'kg',
+                ],
+                [
+                    'raw_phrase' => 'standing overhead press',
+                    'set_count' => 5,
+                    'reps' => 5,
+                    'load_value' => 40,
+                    'load_unit' => 'kg',
+                ],
+            ],
+        ])->assertStructuredContent(fn (AssertableJson $json) => $json
+            ->where('ok', true)
+            ->where('normalized_summary.exercise_count', 3)
+            ->where('normalized_summary.set_count', 15)
+            ->where('normalized_summary.loaded_volume_kg_reps', 5500.0)
+            ->where('saved_session.exercises.0.name', 'Back Squat')
+            ->where('saved_session.exercises.1.name', 'Barbell Bench Press')
+            ->where('saved_session.exercises.2.name', 'Standing Overhead Press')
+            ->etc());
+
+        $this->assertSame(15, WorkoutSet::query()->count());
+        $this->assertSame(5, WorkoutSet::query()->where('load_kg', 100)->where('reps', 5)->count());
+        $this->assertSame(5, WorkoutSet::query()->where('load_kg', 80)->where('reps', 5)->count());
+        $this->assertSame(5, WorkoutSet::query()->where('load_kg', 40)->where('reps', 5)->count());
+    }
+
+    public function test_append_workout_exercise_tool_accepts_compact_repeated_set_payload(): void
+    {
+        $user = app(CurrentUserResolver::class)->user();
+
+        app(WorkoutSessionManager::class)->start($user, [
+            'name' => 'Live push',
+            'idempotency_key' => 'compact-live-start',
+        ]);
+
+        WorkoutMemoryServer::tool(AppendWorkoutExerciseTool::class, [
+            'raw_input' => 'Add 5x5 bench at 80kg.',
+            'idempotency_key' => 'compact-live-bench',
+            'exercise' => [
+                'raw_phrase' => 'barbell bench press',
+                'set_count' => 5,
+                'reps' => 5,
+                'weight_kg' => 80,
+            ],
+        ])->assertStructuredContent(fn (AssertableJson $json) => $json
+            ->where('ok', true)
+            ->where('session.exercises.0.name', 'Barbell Bench Press')
+            ->where('session.exercises.0.sets.0.reps', 5)
+            ->where('session.exercises.0.sets.0.load_kg', 80.0)
+            ->where('resolution_outcomes.0.exercise_name', 'Barbell Bench Press')
+            ->etc());
+
+        $this->assertSame(5, WorkoutSet::query()->where('load_kg', 80)->where('reps', 5)->count());
     }
 
     public function test_log_workout_overrides_uncorroborated_exercise_id_with_phrase_evidence(): void
@@ -1740,6 +1815,21 @@ SQL);
         foreach (glob(app_path('Mcp/Tools/*.php')) as $file) {
             $class = 'App\\Mcp\\Tools\\'.basename($file, '.php');
             $this->assertIsArray(app($class)->schema($schema), "{$class} schema failed to build");
+        }
+    }
+
+    public function test_repeated_set_tool_schemas_advertise_compact_shortcut(): void
+    {
+        $logExerciseSchema = app(LogWorkoutTool::class)->toArray()['inputSchema']['properties']['exercises']['items'];
+        $appendExerciseSchema = app(AppendWorkoutExerciseTool::class)->toArray()['inputSchema']['properties']['exercise'];
+
+        foreach ([$logExerciseSchema, $appendExerciseSchema] as $exerciseSchema) {
+            $this->assertArrayHasKey('set_count', $exerciseSchema['properties']);
+            $this->assertArrayHasKey('reps', $exerciseSchema['properties']);
+            $this->assertArrayHasKey('load_value', $exerciseSchema['properties']);
+            $this->assertArrayHasKey('load_unit', $exerciseSchema['properties']);
+            $this->assertArrayHasKey('weight_kg', $exerciseSchema['properties']);
+            $this->assertNotContains('sets', $exerciseSchema['required'] ?? []);
         }
     }
 
