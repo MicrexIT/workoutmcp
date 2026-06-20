@@ -73,6 +73,13 @@ class AppServiceProvider extends ServiceProvider
                 ->by('registration-hour:'.$this->requestIp($request)),
         ]);
 
+        RateLimiter::for('contact', fn (Request $request): array => [
+            Limit::perMinute($this->rateLimit('contact_per_minute'))
+                ->by('contact-minute:'.$this->requestLimitKey($request, 'contact')),
+            Limit::perHour($this->rateLimit('contact_per_hour'))
+                ->by('contact-hour:'.$this->requestLimitKey($request, 'contact')),
+        ]);
+
         RateLimiter::for('email-verification', fn (Request $request): Limit => Limit::perMinute($this->rateLimit('email_verification_per_minute'))
             ->by($this->requestLimitKey($request, 'email-verification')));
 

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\RegisteredUserController;
+use App\Http\Controllers\SupportController;
 use App\Models\Exercise;
 use App\Models\WorkoutSession;
 use App\Models\WorkoutShare;
@@ -98,15 +99,12 @@ Route::get('/terms', function () {
     ]);
 })->middleware('throttle:public')->name('terms');
 
-Route::get('/support', function () {
-    $publicUrl = rtrim((string) config('workout_memory.oauth.public_url'), '/');
-
-    return view('support', [
-        'publicUrl' => $publicUrl,
-        'mcpUrl' => $publicUrl.'/mcp/workout-memory',
-        'supportEmail' => (string) config('workout_memory.support.email'),
-    ]);
-})->middleware('throttle:public')->name('support');
+Route::get('/support', [SupportController::class, 'show'])
+    ->middleware('throttle:public')
+    ->name('support');
+Route::post('/support', [SupportController::class, 'store'])
+    ->middleware('throttle:contact')
+    ->name('support.store');
 
 Route::middleware('guest')->group(function (): void {
     Route::get('/register', [RegisteredUserController::class, 'create'])->name('register');

@@ -35,6 +35,7 @@
                     <a href="#how" class="transition hover:text-volt">How it works</a>
                     <a href="#setup" class="transition hover:text-volt">Set up</a>
                     <a href="#faq" class="transition hover:text-volt">FAQ</a>
+                    <a href="{{ route('support') }}" class="transition hover:text-volt">Contact</a>
                 </div>
                 @auth
                     <a href="{{ route('home') }}" class="border border-volt px-4 py-2 font-display text-sm uppercase tracking-wider text-volt transition hover:bg-volt hover:text-ink">Dashboard</a>
@@ -368,6 +369,19 @@
                 </div>
             </div>
         </section>
+
+        <section class="border-t border-chalk/10">
+            <div class="mx-auto flex max-w-6xl flex-col justify-between gap-6 px-5 py-14 sm:px-8 md:flex-row md:items-center">
+                <div>
+                    <p class="font-mono text-xs uppercase tracking-[0.3em] text-volt">Contact us</p>
+                    <h2 class="mt-3 font-display text-3xl uppercase leading-none sm:text-4xl">Need help?</h2>
+                    <p class="mt-3 max-w-xl text-sm leading-relaxed text-chalk-dim">
+                        Questions about setup, account access, workout corrections, or data deletion go straight to support.
+                    </p>
+                </div>
+                <a href="{{ route('support') }}" class="inline-flex w-fit items-center justify-center bg-volt px-6 py-3 font-display text-sm uppercase tracking-wider text-ink transition hover:-translate-y-0.5 hover:bg-volt-hot">Contact us</a>
+            </div>
+        </section>
     </main>
 
     <footer class="border-t border-chalk/10">
@@ -390,7 +404,7 @@
                 <a href="{{ route('llms') }}" class="transition hover:text-volt">llms.txt →</a>
                 <a href="{{ route('privacy') }}" class="transition hover:text-volt">Privacy →</a>
                 <a href="{{ route('terms') }}" class="transition hover:text-volt">Terms →</a>
-                <a href="{{ route('support') }}" class="transition hover:text-volt">Support →</a>
+                <a href="{{ route('support') }}" class="transition hover:text-volt">Contact us →</a>
                 @auth
                     <a href="{{ route('home') }}" class="transition hover:text-volt">Dashboard →</a>
                 @else

@@ -20,6 +20,8 @@ return [
         'login_email_per_minute' => (int) env('WORKOUT_MEMORY_RATE_LIMIT_LOGIN_EMAIL_PER_MINUTE', 5),
         'registration_per_minute' => (int) env('WORKOUT_MEMORY_RATE_LIMIT_REGISTRATION_PER_MINUTE', 5),
         'registration_per_hour' => (int) env('WORKOUT_MEMORY_RATE_LIMIT_REGISTRATION_PER_HOUR', 20),
+        'contact_per_minute' => (int) env('WORKOUT_MEMORY_RATE_LIMIT_CONTACT_PER_MINUTE', 3),
+        'contact_per_hour' => (int) env('WORKOUT_MEMORY_RATE_LIMIT_CONTACT_PER_HOUR', 12),
         'email_verification_per_minute' => (int) env('WORKOUT_MEMORY_RATE_LIMIT_EMAIL_VERIFICATION_PER_MINUTE', 6),
         'oauth_metadata_per_minute' => (int) env('WORKOUT_MEMORY_RATE_LIMIT_OAUTH_METADATA_PER_MINUTE', 120),
         'oauth_register_per_minute' => (int) env('WORKOUT_MEMORY_RATE_LIMIT_OAUTH_REGISTER_PER_MINUTE', 60),

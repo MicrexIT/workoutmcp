@@ -26,6 +26,7 @@
             <div class="flex flex-wrap items-center gap-x-5 gap-y-2 font-mono text-xs uppercase tracking-[0.18em] text-chalk-dim">
                 <a href="{{ route('exercises.index') }}" class="transition hover:text-volt">Exercises</a>
                 <a href="{{ route('workouts.index') }}" class="transition hover:text-volt">Workouts</a>
+                <a href="{{ route('support', ['from' => 'app']) }}" class="transition hover:text-volt">Need help?</a>
                 <span class="hidden normal-case tracking-normal sm:inline">{{ auth()->user()->email }}</span>
                 <form method="POST" action="{{ route('logout') }}" class="inline">
                     @csrf
