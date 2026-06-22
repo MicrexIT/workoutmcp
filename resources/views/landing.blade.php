@@ -3,16 +3,69 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Workout Memory · the workout app you never open</title>
-    <meta name="description" content="Workout Memory is an MCP server that gives ChatGPT, Claude and any AI with MCP support a permanent memory for your training. Say what you did and it logs sets, minutes, distance, notes, and answers months later.">
+    <title>Workout Memory · AI workout tracker for ChatGPT and Claude</title>
+    <meta name="description" content="Workout Memory is an AI workout tracker and MCP server for ChatGPT, Claude and other MCP clients. Log sets, minutes, distance and notes by describing your training.">
     <link rel="canonical" href="{{ url('/') }}">
     <link rel="icon" type="image/svg+xml" href="{{ asset('favicon.svg') }}">
     <meta name="theme-color" content="#191813">
     <meta property="og:type" content="website">
     <meta property="og:url" content="{{ url('/') }}">
-    <meta property="og:title" content="Workout Memory · the workout app you never open">
-    <meta property="og:description" content="Give ChatGPT, Claude and any AI with MCP support a permanent memory for your training. Say what you did and each workout becomes history your AI can answer from.">
+    <meta property="og:title" content="Workout Memory · AI workout tracker for ChatGPT and Claude">
+    <meta property="og:description" content="Give ChatGPT, Claude and any MCP client a structured memory for your training. Say what you did and each workout becomes history your AI can answer from.">
+    <meta property="og:image" content="{{ $socialImageUrl }}">
+    <meta property="og:site_name" content="Workout Memory">
     <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="Workout Memory · AI workout tracker for ChatGPT and Claude">
+    <meta name="twitter:description" content="Log workouts by talking to ChatGPT, Claude or any AI client with MCP support.">
+    <meta name="twitter:image" content="{{ $socialImageUrl }}">
+    @php
+        $structuredData = [
+            '@context' => 'https://schema.org',
+            '@graph' => [
+                [
+                    '@type' => 'Organization',
+                    '@id' => $publicUrl.'/#organization',
+                    'name' => 'Workout Memory',
+                    'url' => $publicUrl,
+                    'logo' => $socialImageUrl,
+                ],
+                [
+                    '@type' => 'WebSite',
+                    '@id' => $publicUrl.'/#website',
+                    'name' => 'Workout Memory',
+                    'url' => $publicUrl,
+                    'publisher' => [
+                        '@id' => $publicUrl.'/#organization',
+                    ],
+                ],
+                [
+                    '@type' => 'SoftwareApplication',
+                    '@id' => $publicUrl.'/#software',
+                    'name' => 'Workout Memory',
+                    'applicationCategory' => 'HealthApplication',
+                    'operatingSystem' => 'Web',
+                    'url' => $publicUrl,
+                    'image' => $socialImageUrl,
+                    'description' => 'An AI workout tracker and MCP server that gives ChatGPT, Claude and other MCP clients a structured memory for training.',
+                    'featureList' => [
+                        'Log workouts from natural language',
+                        'Track sets, reps, load, duration, distance and notes',
+                        'Recall workout history through AI assistants',
+                        'Connect through MCP with OAuth authorization',
+                    ],
+                    'offers' => [
+                        '@type' => 'Offer',
+                        'price' => '0',
+                        'priceCurrency' => 'USD',
+                    ],
+                    'publisher' => [
+                        '@id' => $publicUrl.'/#organization',
+                    ],
+                ],
+            ],
+        ];
+    @endphp
+    <script type="application/ld+json">{!! json_encode($structuredData, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_AMP | JSON_HEX_QUOT) !!}</script>
     {{ \Illuminate\Support\Facades\Vite::fonts() }}
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>

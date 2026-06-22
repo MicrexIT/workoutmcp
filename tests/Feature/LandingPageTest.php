@@ -12,11 +12,16 @@ class LandingPageTest extends TestCase
 
     public function test_guest_sees_landing_with_connector_details(): void
     {
-        $mcpUrl = rtrim((string) config('workout_memory.oauth.public_url'), '/').'/mcp/workout-memory';
+        $publicUrl = rtrim((string) config('workout_memory.oauth.public_url'), '/');
+        $mcpUrl = $publicUrl.'/mcp/workout-memory';
 
         $this->get('/')
             ->assertOk()
             ->assertSee('Workout Memory')
+            ->assertSee('Workout Memory · AI workout tracker for ChatGPT and Claude')
+            ->assertSee('AI workout tracker and MCP server', false)
+            ->assertSee('<meta property="og:image" content="'.$publicUrl.'/chatgpt-app-icon-square-1024.png">', false)
+            ->assertSee('"@type":"SoftwareApplication"', false)
             ->assertSee($mcpUrl)
             ->assertSee('https://chatgpt.com/?q=', false)
             ->assertSee('https://claude.ai/new?q=', false)
@@ -39,6 +44,49 @@ class LandingPageTest extends TestCase
             ->assertHeader('Content-Type', 'text/plain; charset=UTF-8')
             ->assertSee($publicUrl.'/mcp/workout-memory', false)
             ->assertSee('Model Context Protocol', false);
+    }
+
+    public function test_sitemap_xml_lists_indexable_public_pages(): void
+    {
+        $publicUrl = rtrim((string) config('workout_memory.oauth.public_url'), '/');
+
+        $response = $this->get('/sitemap.xml')
+            ->assertOk()
+            ->assertHeader('Content-Type', 'application/xml; charset=UTF-8')
+            ->assertHeaderMissing('Set-Cookie');
+
+        $xml = simplexml_load_string($response->getContent());
+
+        $this->assertNotFalse($xml);
+
+        $locations = [];
+
+        foreach ($xml->url as $url) {
+            $locations[] = (string) $url->loc;
+        }
+
+        $this->assertSame([
+            $publicUrl,
+            $publicUrl.'/docs',
+            $publicUrl.'/support',
+            $publicUrl.'/privacy',
+            $publicUrl.'/terms',
+        ], $locations);
+
+        $this->assertStringNotContainsString('/dashboard', $response->getContent());
+        $this->assertStringNotContainsString('/login', $response->getContent());
+        $this->assertStringNotContainsString('/register', $response->getContent());
+        $this->assertStringNotContainsString('/w/', $response->getContent());
+        $this->assertStringNotContainsString('/mcp/', $response->getContent());
+    }
+
+    public function test_robots_txt_points_crawlers_to_sitemap(): void
+    {
+        $robots = file_get_contents(public_path('robots.txt'));
+
+        $this->assertIsString($robots);
+        $this->assertStringContainsString('User-agent: *', $robots);
+        $this->assertStringContainsString('Sitemap: https://workoutmcp.com/sitemap.xml', $robots);
     }
 
     public function test_openai_apps_challenge_returns_verification_token(): void

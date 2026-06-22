@@ -11,11 +11,22 @@ use App\Services\WorkoutMemory\TrainingSummaryService;
 use App\Services\WorkoutMemory\WorkoutShareService;
 use App\Services\WorkoutMemory\WorkoutUpdater;
 use Illuminate\Contracts\View\View;
+use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Foundation\Auth\EmailVerificationRequest;
+use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Session\Middleware\StartSession;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Route;
+use Illuminate\View\Middleware\ShareErrorsFromSession;
+
+$statelessPublicMiddleware = [
+    AddQueuedCookiesToResponse::class,
+    StartSession::class,
+    ShareErrorsFromSession::class,
+    PreventRequestForgery::class,
+];
 
 Route::get('/', function () {
     $publicUrl = rtrim((string) config('workout_memory.oauth.public_url'), '/');
@@ -28,13 +39,36 @@ Route::get('/', function () {
         .'Once it is connected, ask me what I trained today and log my first workout.';
 
     return view('landing', [
+        'publicUrl' => $publicUrl,
         'mcpUrl' => $mcpUrl,
         'registrationOpen' => (bool) config('workout_memory.registration.enabled'),
         'setupPrompt' => $setupPrompt,
         'chatGptPromptUrl' => 'https://chatgpt.com/?q='.rawurlencode($setupPrompt),
         'claudePromptUrl' => 'https://claude.ai/new?q='.rawurlencode($setupPrompt),
+        'socialImageUrl' => $publicUrl.'/chatgpt-app-icon-square-1024.png',
     ]);
 })->middleware('throttle:public')->name('landing');
+
+Route::get('/sitemap.xml', function () {
+    $publicUrl = rtrim((string) config('workout_memory.oauth.public_url'), '/');
+
+    return response()
+        ->view('sitemap', [
+            'urls' => collect([
+                '',
+                '/docs',
+                '/support',
+                '/privacy',
+                '/terms',
+            ])->map(fn (string $path): string => $publicUrl.$path),
+        ])
+        ->header('Content-Type', 'application/xml; charset=UTF-8');
+})->withoutMiddleware($statelessPublicMiddleware)
+    ->middleware([
+        'throttle:public',
+        'cache.headers:public;max_age=3600;s_maxage=86400;stale_while_revalidate=604800;etag',
+    ])
+    ->name('sitemap');
 
 Route::get('/w/{slug}', function (string $slug, TrainingSummaryService $summaries, WorkoutShareService $shares) {
     $share = WorkoutShare::query()->where('slug', $slug)->active()->first();
