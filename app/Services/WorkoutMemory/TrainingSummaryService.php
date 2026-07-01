@@ -88,31 +88,62 @@ class TrainingSummaryService
     /**
      * @return list<array<string, mixed>>
      */
-    public function recentWorkouts(User $user, int $limit = 10, ?string $since = null, ?string $kind = null): array
+    public function recentWorkouts(User $user, int $limit = 20, ?string $since = null, ?string $kind = null): array
     {
-        return $this->sessionQuery($user, $since, $kind)
+        return $this->paginatedRecentWorkouts($user, $limit, $since, $kind)['sessions'];
+    }
+
+    /**
+     * @return array{sessions: list<array<string, mixed>>, pagination: array<string, mixed>}
+     */
+    public function paginatedRecentWorkouts(User $user, int $limit = 20, ?string $since = null, ?string $kind = null, ?string $cursor = null): array
+    {
+        $limit = max(1, min(50, $limit));
+        $paginator = $this->sessionQuery($user, $since, $kind)
             ->with(['exercises.exercise', 'exercises.sets'])
-            ->latest('started_at')
-            ->limit($limit)
-            ->get()
-            ->map(fn (WorkoutSession $session): array => [
-                'id' => $session->id,
-                'name' => $this->namer->displayName($session),
-                'kind' => $session->kind,
-                'started_at' => $session->started_at?->toISOString(),
-                'completed_at' => $session->completed_at?->toISOString(),
-                'exercise_names' => $session->exercises->sortBy('sort_order')->pluck('name_snapshot')->values()->all(),
-                'set_count' => $session->exercises->flatMap->sets->count(),
-                'top_level_volume_signals' => [
-                    'loaded_reps' => $session->exercises->flatMap->sets->sum(fn ($set): int => (int) ($set->load_kg !== null ? $set->reps : 0)),
-                    'bodyweight_reps' => $session->exercises->flatMap->sets->sum(fn ($set): int => (int) ($set->load_kg === null ? $set->reps : 0)),
-                    'duration_seconds' => $session->exercises->flatMap->sets->sum('duration_seconds'),
-                    'duration_display' => $this->durations->human((int) $session->exercises->flatMap->sets->sum('duration_seconds')),
-                    'distance_meters' => round((float) $session->exercises->flatMap->sets->sum('distance_meters'), 2),
-                ],
-            ])
-            ->values()
-            ->all();
+            ->orderByDesc('started_at')
+            ->orderByDesc('id')
+            ->cursorPaginate($limit, ['*'], 'cursor', $cursor);
+
+        $nextCursor = $paginator->nextCursor()?->encode();
+        $previousCursor = $paginator->previousCursor()?->encode();
+
+        return [
+            'sessions' => collect($paginator->items())
+                ->map(fn (WorkoutSession $session): array => $this->recentWorkoutSummary($session))
+                ->values()
+                ->all(),
+            'pagination' => [
+                'limit' => $paginator->perPage(),
+                'next_cursor' => $nextCursor,
+                'previous_cursor' => $previousCursor,
+                'has_next_page' => $nextCursor !== null,
+                'has_previous_page' => $previousCursor !== null,
+            ],
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function recentWorkoutSummary(WorkoutSession $session): array
+    {
+        return [
+            'id' => $session->id,
+            'name' => $this->namer->displayName($session),
+            'kind' => $session->kind,
+            'started_at' => $session->started_at?->toISOString(),
+            'completed_at' => $session->completed_at?->toISOString(),
+            'exercise_names' => $session->exercises->sortBy('sort_order')->pluck('name_snapshot')->values()->all(),
+            'set_count' => $session->exercises->flatMap->sets->count(),
+            'top_level_volume_signals' => [
+                'loaded_reps' => $session->exercises->flatMap->sets->sum(fn ($set): int => (int) ($set->load_kg !== null ? $set->reps : 0)),
+                'bodyweight_reps' => $session->exercises->flatMap->sets->sum(fn ($set): int => (int) ($set->load_kg === null ? $set->reps : 0)),
+                'duration_seconds' => $session->exercises->flatMap->sets->sum('duration_seconds'),
+                'duration_display' => $this->durations->human((int) $session->exercises->flatMap->sets->sum('duration_seconds')),
+                'distance_meters' => round((float) $session->exercises->flatMap->sets->sum('distance_meters'), 2),
+            ],
+        ];
     }
 
     /**

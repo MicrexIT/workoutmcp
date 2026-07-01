@@ -5,6 +5,7 @@ namespace App\Mcp\Servers;
 use App\Mcp\Prompts\BulkWorkoutImportPrompt;
 use App\Mcp\Prompts\TrainingAnalysisPrompt;
 use App\Mcp\Prompts\WorkoutMemoryGuidancePrompt;
+use App\Mcp\Resources\WorkoutHistoryApp;
 use App\Mcp\Tools\AppendSessionStoryTool;
 use App\Mcp\Tools\AppendWorkoutExerciseTool;
 use App\Mcp\Tools\CreateExerciseTool;
@@ -22,6 +23,7 @@ use App\Mcp\Tools\RememberExercisePhraseTool;
 use App\Mcp\Tools\ResolveExerciseMentionsTool;
 use App\Mcp\Tools\SearchExercisesTool;
 use App\Mcp\Tools\ShareWorkoutTool;
+use App\Mcp\Tools\ShowWorkoutHistoryTool;
 use App\Mcp\Tools\StartWorkoutSessionTool;
 use App\Mcp\Tools\UpdateUserContextTool;
 use App\Mcp\Tools\UpdateWorkoutTool;
@@ -58,10 +60,11 @@ class WorkoutMemoryServer extends Server
         UpdateWorkoutTool::class,
         DeleteWorkoutTool::class,
         ShareWorkoutTool::class,
+        ShowWorkoutHistoryTool::class,
     ];
 
     protected array $resources = [
-        //
+        WorkoutHistoryApp::class,
     ];
 
     protected array $prompts = [

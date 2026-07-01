@@ -317,6 +317,17 @@ trait BuildsWorkoutOutputSchemas
         ]);
     }
 
+    protected function cursorPaginationSchema(JsonSchema $schema): ObjectType
+    {
+        return $schema->object([
+            'limit' => $schema->integer()->required(),
+            'next_cursor' => $schema->string()->required()->nullable(),
+            'previous_cursor' => $schema->string()->required()->nullable(),
+            'has_next_page' => $schema->boolean()->required(),
+            'has_previous_page' => $schema->boolean()->required(),
+        ]);
+    }
+
     protected function trainingSummarySchema(JsonSchema $schema): ObjectType
     {
         return $schema->object([

@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Mcp\Prompts\BulkWorkoutImportPrompt;
 use App\Mcp\Prompts\TrainingAnalysisPrompt;
 use App\Mcp\Prompts\WorkoutMemoryGuidancePrompt;
+use App\Mcp\Resources\WorkoutHistoryApp;
 use App\Mcp\Servers\WorkoutMemoryServer;
 use App\Mcp\Tools\AppendWorkoutExerciseTool;
 use App\Mcp\Tools\GetCurrentWorkoutSessionTool;
@@ -16,9 +17,11 @@ use App\Mcp\Tools\LogWorkoutTool;
 use App\Mcp\Tools\RememberExercisePhraseTool;
 use App\Mcp\Tools\ResolveExerciseMentionsTool;
 use App\Mcp\Tools\SearchExercisesTool;
+use App\Mcp\Tools\ShowWorkoutHistoryTool;
 use App\Models\Exercise;
 use App\Models\ExercisePhraseMemory;
 use App\Models\ExerciseResolutionAttempt;
+use App\Models\User;
 use App\Models\WorkoutExercise;
 use App\Models\WorkoutSession;
 use App\Models\WorkoutSet;
@@ -34,6 +37,7 @@ use Illuminate\JsonSchema\JsonSchemaTypeFactory;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Testing\Fluent\AssertableJson;
 use Laravel\Mcp\Server\Methods\ListPrompts;
+use Laravel\Mcp\Server\Methods\ListResources;
 use Laravel\Mcp\Server\Methods\ListTools;
 use Laravel\Mcp\Server\Transport\FakeTransporter;
 use Laravel\Mcp\Transport\JsonRpcRequest;
@@ -979,6 +983,77 @@ SQL);
         $this->assertSame(1, $summaries->trainingSummary($user)['recent_frequency']['session_count']);
     }
 
+    public function test_recent_workouts_default_to_twenty_and_return_pagination_metadata(): void
+    {
+        $user = app(CurrentUserResolver::class)->user();
+        $startedAt = now();
+
+        for ($index = 1; $index <= 25; $index++) {
+            $this->createCompletedWorkout($user, sprintf('Session %02d', $index), $startedAt->copy()->subMinutes($index));
+        }
+
+        WorkoutMemoryServer::tool(ListRecentWorkoutsTool::class)
+            ->assertStructuredContent(fn (AssertableJson $json) => $json
+                ->where('ok', true)
+                ->has('sessions', 20)
+                ->where('sessions.0.name', 'Session 01')
+                ->where('pagination.limit', 20)
+                ->where('pagination.has_next_page', true)
+                ->where('pagination.has_previous_page', false)
+                ->where('pagination.next_cursor', fn ($cursor): bool => is_string($cursor) && $cursor !== '')
+                ->where('pagination.previous_cursor', null)
+                ->etc());
+    }
+
+    public function test_recent_workouts_cursor_navigation_is_stable_and_non_overlapping(): void
+    {
+        $user = app(CurrentUserResolver::class)->user();
+        $startedAt = now();
+
+        for ($index = 1; $index <= 45; $index++) {
+            $this->createCompletedWorkout($user, sprintf('Session %02d', $index), $startedAt);
+        }
+
+        $summaries = app(TrainingSummaryService::class);
+        $firstPage = $summaries->paginatedRecentWorkouts($user, 20);
+        $secondPage = $summaries->paginatedRecentWorkouts($user, 20, cursor: $firstPage['pagination']['next_cursor']);
+        $firstPageAgain = $summaries->paginatedRecentWorkouts($user, 20, cursor: $secondPage['pagination']['previous_cursor']);
+
+        $firstPageIds = collect($firstPage['sessions'])->pluck('id')->all();
+        $secondPageIds = collect($secondPage['sessions'])->pluck('id')->all();
+
+        $this->assertCount(20, $firstPageIds);
+        $this->assertCount(20, $secondPageIds);
+        $this->assertSame([], array_values(array_intersect($firstPageIds, $secondPageIds)));
+        $this->assertNotNull($firstPage['pagination']['next_cursor']);
+        $this->assertNull($firstPage['pagination']['previous_cursor']);
+        $this->assertNotNull($secondPage['pagination']['next_cursor']);
+        $this->assertNotNull($secondPage['pagination']['previous_cursor']);
+        $this->assertSame($firstPageIds, collect($firstPageAgain['sessions'])->pluck('id')->all());
+    }
+
+    public function test_recent_workouts_filters_still_apply_with_cursor_pagination(): void
+    {
+        $user = app(CurrentUserResolver::class)->user();
+        $startedAt = now();
+
+        $this->createCompletedWorkout($user, 'Old strength', $startedAt->copy()->subDays(8), 'strength');
+        $this->createCompletedWorkout($user, 'Recent mobility', $startedAt->copy()->subDay(), 'mobility');
+        $this->createCompletedWorkout($user, 'Recent strength A', $startedAt->copy()->subHours(3), 'strength');
+        $this->createCompletedWorkout($user, 'Recent strength B', $startedAt->copy()->subHours(2), 'strength');
+
+        $page = app(TrainingSummaryService::class)->paginatedRecentWorkouts(
+            $user,
+            20,
+            $startedAt->copy()->subDays(2)->toISOString(),
+            'strength',
+        );
+
+        $this->assertSame(['Recent strength B', 'Recent strength A'], collect($page['sessions'])->pluck('name')->all());
+        $this->assertFalse($page['pagination']['has_next_page']);
+        $this->assertFalse($page['pagination']['has_previous_page']);
+    }
+
     public function test_completed_workout_uses_exercise_names_when_name_is_placeholder(): void
     {
         $user = app(CurrentUserResolver::class)->user();
@@ -1908,7 +1983,56 @@ SQL);
         $this->assertContains('update_workout', $toolNames);
         $this->assertContains('delete_workout', $toolNames);
         $this->assertContains('share_workout', $toolNames);
+        $this->assertContains('show_workout_history', $toolNames);
         $this->assertArrayNotHasKey('nextCursor', $response['result']);
+    }
+
+    public function test_workout_history_app_tool_and_resource_are_registered(): void
+    {
+        $server = app()->make(WorkoutMemoryServer::class, ['transport' => new FakeTransporter]);
+        $toolsResponse = (new ListTools)->handle(
+            new JsonRpcRequest('tools-list', 'tools/list', []),
+            $server->createContext(),
+        )->toArray();
+
+        $tool = collect($toolsResponse['result']['tools'])->firstWhere('name', 'show_workout_history');
+
+        $this->assertNotNull($tool);
+        $this->assertSame('ui://resources/workout-history-app', $tool['_meta']['ui']['resourceUri'] ?? null);
+        $this->assertSame(['model', 'app'], $tool['_meta']['ui']['visibility'] ?? null);
+        $this->assertTrue((bool) $tool['annotations']['readOnlyHint']);
+        $this->assertFalse((bool) $tool['annotations']['destructiveHint']);
+        $this->assertFalse((bool) $tool['annotations']['openWorldHint']);
+
+        WorkoutMemoryServer::tool(ShowWorkoutHistoryTool::class, [
+            'limit' => 30,
+            'kind' => 'strength',
+            'selected_workout_id' => 123,
+        ])->assertStructuredContent(fn (AssertableJson $json) => $json
+            ->where('ok', true)
+            ->where('initial_query.limit', 30)
+            ->where('initial_query.kind', 'strength')
+            ->where('initial_query.selected_workout_id', 123)
+            ->etc());
+
+        $resourcesResponse = (new ListResources)->handle(
+            new JsonRpcRequest('resources-list', 'resources/list', []),
+            $server->createContext(),
+        )->toArray();
+
+        $resource = collect($resourcesResponse['result']['resources'])->firstWhere('uri', 'ui://resources/workout-history-app');
+
+        $this->assertNotNull($resource);
+        $this->assertSame('text/html;profile=mcp-app', $resource['mimeType']);
+        $this->assertIsArray($resource['_meta']['ui']);
+
+        WorkoutMemoryServer::resource(WorkoutHistoryApp::class)
+            ->assertSee([
+                'workout-history-root',
+                'list_recent_workouts',
+                'get_workout',
+                'updateModelContext',
+            ]);
     }
 
     public function test_reopen_session_refuses_while_another_session_is_active(): void
@@ -2066,6 +2190,20 @@ SQL);
             ->where('ok', true)
             ->has('phrase_memory')
             ->etc());
+    }
+
+    private function createCompletedWorkout(User $user, string $name, mixed $startedAt, string $kind = 'mixed'): WorkoutSession
+    {
+        return WorkoutSession::query()->create([
+            'user_id' => $user->id,
+            'name' => $name,
+            'started_at' => $startedAt,
+            'completed_at' => $startedAt,
+            'occurred_timezone' => 'UTC',
+            'status' => 'completed',
+            'kind' => $kind,
+            'source' => 'chatgpt',
+        ]);
     }
 
     public function test_debug_pages_load(): void

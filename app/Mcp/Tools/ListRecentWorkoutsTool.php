@@ -29,25 +29,31 @@ class ListRecentWorkoutsTool extends Tool
     {
         $validated = $request->validate([
             'limit' => ['sometimes', 'integer', 'min:1', 'max:50'],
+            'cursor' => ['sometimes', 'nullable', 'string'],
             'since' => ['sometimes', 'nullable', 'string'],
             'kind' => ['sometimes', 'nullable', 'string'],
         ]);
 
+        $recentWorkouts = $summaries->paginatedRecentWorkouts(
+            $this->currentUser($users),
+            $validated['limit'] ?? 20,
+            $validated['since'] ?? null,
+            $validated['kind'] ?? null,
+            $validated['cursor'] ?? null,
+        );
+
         return $this->structured([
             'stale_active_session' => $sessions->staleActiveSessionNotice($this->currentUser($users)),
-            'sessions' => $summaries->recentWorkouts(
-                $this->currentUser($users),
-                $validated['limit'] ?? 10,
-                $validated['since'] ?? null,
-                $validated['kind'] ?? null,
-            ),
+            'sessions' => $recentWorkouts['sessions'],
+            'pagination' => $recentWorkouts['pagination'],
         ], 'Recent workouts loaded.');
     }
 
     public function schema(JsonSchema $schema): array
     {
         return [
-            'limit' => $schema->integer()->default(10),
+            'limit' => $schema->integer()->default(20),
+            'cursor' => $schema->string()->nullable()->description('Cursor returned from pagination.next_cursor or pagination.previous_cursor.'),
             'since' => $schema->string()->nullable(),
             'kind' => $schema->string()->nullable(),
         ];
@@ -58,6 +64,7 @@ class ListRecentWorkoutsTool extends Tool
         return $this->baseOutputSchema($schema, [
             'stale_active_session' => $this->staleActiveSessionSchema($schema)->required()->nullable(),
             'sessions' => $schema->array()->required()->items($this->recentWorkoutSchema($schema)),
+            'pagination' => $this->cursorPaginationSchema($schema)->required(),
         ]);
     }
 }
