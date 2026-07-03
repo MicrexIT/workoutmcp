@@ -15,9 +15,11 @@ use App\Mcp\Tools\GetCurrentWorkoutSessionTool;
 use App\Mcp\Tools\GetExerciseHistoryTool;
 use App\Mcp\Tools\GetTrainingSummaryTool;
 use App\Mcp\Tools\GetUserContextTool;
+use App\Mcp\Tools\GetWorkoutHistoryWorkoutTool;
 use App\Mcp\Tools\GetWorkoutMemoryHelpTool;
 use App\Mcp\Tools\GetWorkoutTool;
 use App\Mcp\Tools\ListRecentWorkoutsTool;
+use App\Mcp\Tools\ListWorkoutHistorySessionsTool;
 use App\Mcp\Tools\LogWorkoutTool;
 use App\Mcp\Tools\RememberExercisePhraseTool;
 use App\Mcp\Tools\ResolveExerciseMentionsTool;
@@ -61,6 +63,8 @@ class WorkoutMemoryServer extends Server
         DeleteWorkoutTool::class,
         ShareWorkoutTool::class,
         ShowWorkoutHistoryTool::class,
+        ListWorkoutHistorySessionsTool::class,
+        GetWorkoutHistoryWorkoutTool::class,
     ];
 
     protected array $resources = [

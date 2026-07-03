@@ -11,8 +11,10 @@ use App\Mcp\Tools\AppendWorkoutExerciseTool;
 use App\Mcp\Tools\GetCurrentWorkoutSessionTool;
 use App\Mcp\Tools\GetTrainingSummaryTool;
 use App\Mcp\Tools\GetUserContextTool;
+use App\Mcp\Tools\GetWorkoutHistoryWorkoutTool;
 use App\Mcp\Tools\GetWorkoutMemoryHelpTool;
 use App\Mcp\Tools\ListRecentWorkoutsTool;
+use App\Mcp\Tools\ListWorkoutHistorySessionsTool;
 use App\Mcp\Tools\LogWorkoutTool;
 use App\Mcp\Tools\RememberExercisePhraseTool;
 use App\Mcp\Tools\ResolveExerciseMentionsTool;
@@ -1995,7 +1997,10 @@ SQL);
             $server->createContext(),
         )->toArray();
 
-        $tool = collect($toolsResponse['result']['tools'])->firstWhere('name', 'show_workout_history');
+        $tools = collect($toolsResponse['result']['tools']);
+        $tool = $tools->firstWhere('name', 'show_workout_history');
+        $sessionTool = $tools->firstWhere('name', 'list_workout_history_sessions');
+        $workoutTool = $tools->firstWhere('name', 'get_workout_history_workout');
 
         $this->assertNotNull($tool);
         $this->assertSame('ui://resources/workout-history-app', $tool['_meta']['ui']['resourceUri'] ?? null);
@@ -2003,6 +2008,20 @@ SQL);
         $this->assertTrue((bool) $tool['annotations']['readOnlyHint']);
         $this->assertFalse((bool) $tool['annotations']['destructiveHint']);
         $this->assertFalse((bool) $tool['annotations']['openWorldHint']);
+
+        $this->assertNotNull($sessionTool);
+        $this->assertSame('ui://resources/workout-history-app', $sessionTool['_meta']['ui']['resourceUri'] ?? null);
+        $this->assertSame(['app'], $sessionTool['_meta']['ui']['visibility'] ?? null);
+        $this->assertTrue((bool) $sessionTool['annotations']['readOnlyHint']);
+        $this->assertFalse((bool) $sessionTool['annotations']['destructiveHint']);
+        $this->assertFalse((bool) $sessionTool['annotations']['openWorldHint']);
+
+        $this->assertNotNull($workoutTool);
+        $this->assertSame('ui://resources/workout-history-app', $workoutTool['_meta']['ui']['resourceUri'] ?? null);
+        $this->assertSame(['app'], $workoutTool['_meta']['ui']['visibility'] ?? null);
+        $this->assertTrue((bool) $workoutTool['annotations']['readOnlyHint']);
+        $this->assertFalse((bool) $workoutTool['annotations']['destructiveHint']);
+        $this->assertFalse((bool) $workoutTool['annotations']['openWorldHint']);
 
         WorkoutMemoryServer::tool(ShowWorkoutHistoryTool::class, [
             'limit' => 30,
@@ -2014,6 +2033,19 @@ SQL);
             ->where('initial_query.kind', 'strength')
             ->where('initial_query.selected_workout_id', 123)
             ->etc());
+
+        WorkoutMemoryServer::tool(ListWorkoutHistorySessionsTool::class, ['limit' => 5])
+            ->assertStructuredContent(fn (AssertableJson $json) => $json
+                ->where('ok', true)
+                ->has('sessions')
+                ->has('pagination')
+                ->etc());
+
+        WorkoutMemoryServer::tool(GetWorkoutHistoryWorkoutTool::class, ['workout_id' => 999_999])
+            ->assertStructuredContent(fn (AssertableJson $json) => $json
+                ->where('ok', true)
+                ->where('workout', null)
+                ->etc());
 
         $resourcesResponse = (new ListResources)->handle(
             new JsonRpcRequest('resources-list', 'resources/list', []),
@@ -2029,8 +2061,8 @@ SQL);
         WorkoutMemoryServer::resource(WorkoutHistoryApp::class)
             ->assertSee([
                 'workout-history-root',
-                'list_recent_workouts',
-                'get_workout',
+                'list_workout_history_sessions',
+                'get_workout_history_workout',
                 'updateModelContext',
             ]);
     }

@@ -783,7 +783,7 @@
                 }
 
                 try {
-                    const result = await state.app.callServerTool("list_recent_workouts", args);
+                    const result = await state.app.callServerTool("list_workout_history_sessions", args);
 
                     if (result.isError) {
                         throw new Error(result.content?.[0]?.text ?? "Could not load sessions.");
@@ -823,7 +823,7 @@
                 setDetailLoading("Loading workout...");
 
                 try {
-                    const result = await state.app.callServerTool("get_workout", { workout_id: workoutId });
+                    const result = await state.app.callServerTool("get_workout_history_workout", { workout_id: workoutId });
 
                     if (result.isError) {
                         throw new Error(result.content?.[0]?.text ?? "Could not load workout.");
