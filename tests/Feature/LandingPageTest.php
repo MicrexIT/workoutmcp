@@ -133,6 +133,35 @@ class LandingPageTest extends TestCase
             ->assertSee($supportEmail, false);
     }
 
+    public function test_setup_screenshots_are_published_and_referenced(): void
+    {
+        $screenshots = [
+            'images/docs/chatgpt-developer-mode.png',
+            'images/docs/chatgpt-apps-list.png',
+            'images/docs/chatgpt-new-app.png',
+            'images/docs/chatgpt-app-connected.png',
+            'images/docs/claude-add-custom-connector.png',
+            'images/docs/claude-connector-dialog.png',
+        ];
+
+        foreach ($screenshots as $screenshot) {
+            $this->assertFileExists(public_path($screenshot));
+            $this->assertGreaterThan(0, filesize(public_path($screenshot)));
+        }
+
+        $landing = $this->get('/')->assertOk();
+
+        foreach ($screenshots as $screenshot) {
+            $landing->assertSee($screenshot, false);
+        }
+
+        $docs = $this->get('/docs')->assertOk();
+
+        foreach (array_diff($screenshots, ['images/docs/chatgpt-apps-list.png']) as $screenshot) {
+            $docs->assertSee($screenshot, false);
+        }
+    }
+
     public function test_demo_video_asset_exists_at_public_path(): void
     {
         $path = public_path('demo.mp4');

@@ -57,17 +57,32 @@
             <div class="mt-5 grid gap-6 md:grid-cols-2">
                 <div>
                     <h3 class="font-display text-lg uppercase">ChatGPT</h3>
-                    <ol class="mt-3 flex flex-col gap-2 text-sm leading-relaxed text-chalk-dim">
-                        <li>Enable Developer mode in Settings -> Apps & Connectors -> Advanced settings.</li>
-                        <li>Create a custom app named Workout Memory with the MCP endpoint above.</li>
-                        <li>Select OAuth authentication, connect, sign in, and approve access.</li>
+                    <ol class="mt-3 flex flex-col gap-4 text-sm leading-relaxed text-chalk-dim">
+                        <li>
+                            Enable Developer mode in Settings -> Apps & Connectors -> Advanced settings.
+                            <img src="{{ asset('images/docs/chatgpt-developer-mode.png') }}" alt="ChatGPT advanced settings with the Developer mode toggle switched on" loading="lazy" decoding="async" class="mt-2 w-full border border-chalk/15">
+                        </li>
+                        <li>
+                            Create a custom app named Workout Memory with the MCP endpoint above.
+                            <img src="{{ asset('images/docs/chatgpt-new-app.png') }}" alt="ChatGPT New App dialog with the MCP endpoint pasted and OAuth authentication selected" loading="lazy" decoding="async" class="mt-2 w-full border border-chalk/15">
+                        </li>
+                        <li>
+                            Select OAuth authentication, connect, sign in, and approve access.
+                            <img src="{{ asset('images/docs/chatgpt-app-connected.png') }}" alt="ChatGPT app detail page showing the connected app with OAuth authorization" loading="lazy" decoding="async" class="mt-2 w-full border border-chalk/15">
+                        </li>
                     </ol>
                 </div>
                 <div>
                     <h3 class="font-display text-lg uppercase">Claude</h3>
-                    <ol class="mt-3 flex flex-col gap-2 text-sm leading-relaxed text-chalk-dim">
-                        <li>Open Settings -> Connectors -> Add custom connector.</li>
-                        <li>Paste the MCP endpoint above.</li>
+                    <ol class="mt-3 flex flex-col gap-4 text-sm leading-relaxed text-chalk-dim">
+                        <li>
+                            Open Settings -> Connectors -> Add -> Add custom connector.
+                            <img src="{{ asset('images/docs/claude-add-custom-connector.png') }}" alt="Claude connectors settings with the Add menu open showing the Add custom connector option" loading="lazy" decoding="async" class="mt-2 w-full border border-chalk/15">
+                        </li>
+                        <li>
+                            Paste the MCP endpoint above.
+                            <img src="{{ asset('images/docs/claude-connector-dialog.png') }}" alt="Claude Add custom connector dialog with a name and the MCP endpoint filled in" loading="lazy" decoding="async" class="mt-2 w-full border border-chalk/15">
+                        </li>
                         <li>Connect, sign in, and approve access.</li>
                     </ol>
                 </div>
