@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\RegisterUserRequest;
 use App\Models\User;
 use App\Services\WorkoutMemory\CurrentUserResolver;
+use App\Services\WorkoutMemory\WorkoutMemoryActivityLogger;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
@@ -23,8 +24,9 @@ class RegisteredUserController extends Controller
         return view('auth.register');
     }
 
-    public function store(RegisterUserRequest $request, CurrentUserResolver $users): RedirectResponse
+    public function store(RegisterUserRequest $request, CurrentUserResolver $users, WorkoutMemoryActivityLogger $activity): RedirectResponse
     {
+        $wasFirstAccount = User::query()->doesntExist();
         $user = User::query()->create($request->safe()->only(['name', 'email', 'password']));
 
         $users->withProfile($user);
@@ -32,6 +34,12 @@ class RegisteredUserController extends Controller
 
         Auth::login($user);
         $request->session()->regenerate();
+
+        $activity->info('auth.registration.completed', [
+            ...$activity->userContext($user),
+            'email_hash' => $activity->emailHash($user->email),
+            'was_first_account' => $wasFirstAccount,
+        ], $request);
 
         return redirect()->route('verification.notice')
             ->with('status', 'Account created. Check your email to verify your address.');

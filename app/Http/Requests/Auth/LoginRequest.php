@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Auth;
 
+use App\Services\WorkoutMemory\WorkoutMemoryActivityLogger;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Auth;
@@ -39,6 +40,13 @@ class LoginRequest extends FormRequest
         if (Auth::attempt($this->only('email', 'password'), $this->boolean('remember'))) {
             return;
         }
+
+        $activity = app(WorkoutMemoryActivityLogger::class);
+
+        $activity->warning('auth.login.failed', [
+            'email_hash' => $activity->emailHash($this->string('email')->toString()),
+            'remember' => $this->boolean('remember'),
+        ], $this);
 
         throw ValidationException::withMessages([
             'email' => __('auth.failed'),

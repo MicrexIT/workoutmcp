@@ -16,6 +16,7 @@ class WorkoutLogger
         private readonly WorkoutExerciseWriter $exerciseWriter,
         private readonly WorkoutSessionManager $sessions,
         private readonly WorkoutSessionNamer $namer,
+        private readonly WorkoutMemoryActivityLogger $activity,
     ) {}
 
     /**
@@ -27,24 +28,47 @@ class WorkoutLogger
         $existing = $this->existingIdempotentSession($user, $input);
 
         if ($existing !== null) {
+            $summary = $this->summaries->workout($existing);
+            $normalizedSummary = $this->normalizedSummary($existing);
+
+            $this->activity->info('workout.log.idempotent_replay', [
+                ...$this->activity->userContext($user),
+                ...$this->activity->workoutInputContext($input),
+                ...$this->activity->sessionSummaryContext($summary),
+            ]);
+
             return [
                 'idempotent_replay' => true,
                 'possible_duplicate' => null,
                 'unresolved_or_ambiguous_items' => [],
-                'saved_session' => $this->summaries->workout($existing),
-                'normalized_summary' => $this->normalizedSummary($existing),
+                'saved_session' => $summary,
+                'normalized_summary' => $normalizedSummary,
             ];
         }
 
         $activeSessionConflict = $this->activeSessionConflict($user, $input);
 
         if ($activeSessionConflict !== null) {
+            $this->activity->warning('workout.log.refused', [
+                ...$this->activity->userContext($user),
+                ...$this->activity->workoutInputContext($input),
+                'reason_key' => 'active_session_conflict',
+                'active_session_id' => $activeSessionConflict['active_session']['id'] ?? null,
+            ]);
+
             return $activeSessionConflict;
         }
 
         $validation = $this->exerciseWriter->validateExercises($user, $input['exercises'] ?? []);
 
         if ($validation !== []) {
+            $this->activity->warning('workout.log.refused', [
+                ...$this->activity->userContext($user),
+                ...$this->activity->workoutInputContext($input),
+                'reason_key' => 'structural_validation',
+                'validation_issue_count' => count($validation),
+            ]);
+
             return [
                 'refused' => true,
                 'refusal_reason' => 'Workout entries are structurally invalid: each entry needs a raw_phrase or a known exercise_id.',
@@ -106,6 +130,28 @@ class WorkoutLogger
         }, attempts: 3);
 
         $session = $session->fresh(['exercises.sets', 'exercises.exercise']);
+        $summary = $this->summaries->workout($session);
+        $normalizedSummary = $this->normalizedSummary($session);
+
+        if ($possibleDuplicate !== null) {
+            $this->activity->warning('workout.log.possible_duplicate', [
+                ...$this->activity->userContext($user),
+                ...$this->activity->workoutInputContext($input),
+                'possible_duplicate_workout_id' => $possibleDuplicate['workout_id'] ?? null,
+            ]);
+        }
+
+        $this->activity->info('workout.log.created', [
+            ...$this->activity->userContext($user),
+            ...$this->activity->workoutInputContext($input),
+            ...$this->activity->sessionSummaryContext($summary),
+            'kind' => $session->kind,
+            'auto_finished_stale_session' => $autoFinishedStaleSession !== null,
+            'possible_duplicate' => $possibleDuplicate !== null,
+            'loaded_volume_kg_reps' => $normalizedSummary['loaded_volume_kg_reps'],
+            'duration_seconds' => $normalizedSummary['duration_seconds'],
+            'distance_meters' => $normalizedSummary['distance_meters'],
+        ]);
 
         return [
             'refused' => false,
@@ -114,8 +160,8 @@ class WorkoutLogger
             'auto_finished_stale_session' => $autoFinishedStaleSession,
             'unresolved_or_ambiguous_items' => [],
             ...$this->exerciseWriter->outcomeSummary($outcomes),
-            'saved_session' => $this->summaries->workout($session),
-            'normalized_summary' => $this->normalizedSummary($session),
+            'saved_session' => $summary,
+            'normalized_summary' => $normalizedSummary,
         ];
     }
 

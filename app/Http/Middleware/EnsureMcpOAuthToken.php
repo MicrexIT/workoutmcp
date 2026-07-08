@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Services\WorkoutMemory\McpOAuthServer;
+use App\Services\WorkoutMemory\WorkoutMemoryActivityLogger;
 use Closure;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Http\Request;
@@ -11,6 +12,8 @@ use Symfony\Component\HttpFoundation\Response;
 
 class EnsureMcpOAuthToken
 {
+    public function __construct(private readonly WorkoutMemoryActivityLogger $activity) {}
+
     /**
      * Handle an incoming request.
      *
@@ -22,6 +25,11 @@ class EnsureMcpOAuthToken
         $user = $oauth->userForAccessToken($request->bearerToken(), $request->path());
 
         if ($user === null) {
+            $this->activity->warning('mcp.oauth_token.rejected', [
+                'has_bearer_token' => is_string($request->bearerToken()) && $request->bearerToken() !== '',
+                'resource_path' => $request->path(),
+            ], $request);
+
             return response()->json([
                 'message' => 'Invalid or missing MCP OAuth bearer token.',
             ], 401)->header(
@@ -31,6 +39,11 @@ class EnsureMcpOAuthToken
         }
 
         if ($user instanceof MustVerifyEmail && ! $user->hasVerifiedEmail()) {
+            $this->activity->warning('mcp.oauth_token.unverified_user_rejected', [
+                ...$this->activity->userContext($user),
+                'resource_path' => $request->path(),
+            ], $request);
+
             return response()->json([
                 'message' => 'Your email address is not verified.',
             ], 403);

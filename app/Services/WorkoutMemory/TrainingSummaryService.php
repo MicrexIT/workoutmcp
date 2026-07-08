@@ -15,6 +15,7 @@ class TrainingSummaryService
     public function __construct(
         private readonly WorkoutSessionNamer $namer,
         private readonly WorkoutDurationFormatter $durations,
+        private readonly WorkoutMemoryActivityLogger $activity,
     ) {}
 
     /**
@@ -107,12 +108,24 @@ class TrainingSummaryService
 
         $nextCursor = $paginator->nextCursor()?->encode();
         $previousCursor = $paginator->previousCursor()?->encode();
+        $sessions = collect($paginator->items())
+            ->map(fn (WorkoutSession $session): array => $this->recentWorkoutSummary($session))
+            ->values()
+            ->all();
+
+        $this->activity->info('workouts.retrieve.listed', [
+            ...$this->activity->userContext($user),
+            'limit' => $paginator->perPage(),
+            'result_count' => count($sessions),
+            'has_next_page' => $nextCursor !== null,
+            'has_previous_page' => $previousCursor !== null,
+            'has_since_filter' => $since !== null,
+            'kind' => $kind,
+            'has_cursor' => $cursor !== null,
+        ]);
 
         return [
-            'sessions' => collect($paginator->items())
-                ->map(fn (WorkoutSession $session): array => $this->recentWorkoutSummary($session))
-                ->values()
-                ->all(),
+            'sessions' => $sessions,
             'pagination' => [
                 'limit' => $paginator->perPage(),
                 'next_cursor' => $nextCursor,
@@ -156,7 +169,23 @@ class TrainingSummaryService
             ->whereKey($workoutId)
             ->first();
 
-        return $session ? $this->workout($session) : null;
+        if ($session === null) {
+            $this->activity->warning('workout.retrieve.missing', [
+                ...$this->activity->userContext($user),
+                'workout_id' => $workoutId,
+            ]);
+
+            return null;
+        }
+
+        $summary = $this->workout($session);
+
+        $this->activity->info('workout.retrieve.loaded', [
+            ...$this->activity->userContext($user),
+            ...$this->activity->sessionSummaryContext($summary),
+        ]);
+
+        return $summary;
     }
 
     /**

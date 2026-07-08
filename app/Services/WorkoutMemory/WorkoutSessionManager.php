@@ -19,6 +19,7 @@ class WorkoutSessionManager
         private readonly TrainingSummaryService $summaries,
         private readonly WorkoutExerciseWriter $exerciseWriter,
         private readonly WorkoutSessionNamer $namer,
+        private readonly WorkoutMemoryActivityLogger $activity,
     ) {}
 
     /**
@@ -28,11 +29,21 @@ class WorkoutSessionManager
     {
         $active = $this->activeSession($user);
         $latestCompleted = $this->latestCompletedSession($user);
+        $activeSummary = $active ? $this->summaries->workout($active) : null;
+        $latestCompletedSummary = $latestCompleted ? $this->summaries->workout($latestCompleted) : null;
+
+        $this->activity->info('workout.session.current_loaded', [
+            ...$this->activity->userContext($user),
+            'has_active_session' => $activeSummary !== null,
+            'active_session_id' => $activeSummary['id'] ?? null,
+            'active_session_is_stale' => $active ? $this->isStaleActiveSession($active) : false,
+            'latest_completed_session_id' => $latestCompletedSummary['id'] ?? null,
+        ]);
 
         return [
-            'active_session' => $active ? $this->summaries->workout($active) : null,
+            'active_session' => $activeSummary,
             'active_session_is_stale' => $active ? $this->isStaleActiveSession($active) : false,
-            'latest_completed_session' => $latestCompleted ? $this->summaries->workout($latestCompleted) : null,
+            'latest_completed_session' => $latestCompletedSummary,
             'append_target_guidance' => [
                 'current_live_workout' => 'Use append_session_story or append_workout_exercise with target_session=active_or_new.',
                 'just_logged_or_last_session' => 'Use append_workout_exercise with target_session=latest_completed when the user clearly refers to the most recent completed session.',
@@ -51,12 +62,16 @@ class WorkoutSessionManager
         $existing = $this->idempotentSession($user, $input);
 
         if ($existing !== null) {
-            return [
+            $result = [
                 'refused' => false,
                 'idempotent_replay' => true,
                 'session_was_created' => false,
                 'active_session' => $this->summaries->workout($existing),
             ];
+
+            $this->logSessionOperationResult('start', 'workout.session.started', $user, $input, $result);
+
+            return $result;
         }
 
         $active = $this->activeSession($user);
@@ -68,13 +83,17 @@ class WorkoutSessionManager
         }
 
         if ($active !== null) {
-            return [
+            $result = [
                 'refused' => false,
                 'idempotent_replay' => false,
                 'session_was_created' => false,
                 'session_was_resumed' => true,
                 'active_session' => $this->summaries->workout($active),
             ];
+
+            $this->logSessionOperationResult('start', 'workout.session.started', $user, $input, $result);
+
+            return $result;
         }
 
         $session = DB::transaction(function () use ($user, $input): WorkoutSession {
@@ -101,7 +120,7 @@ class WorkoutSessionManager
             return $session;
         }, attempts: 3);
 
-        return [
+        $result = [
             'refused' => false,
             'idempotent_replay' => false,
             'session_was_created' => true,
@@ -109,6 +128,10 @@ class WorkoutSessionManager
             'auto_finished_stale_session' => $autoFinished,
             'active_session' => $this->summaries->workout($session->fresh(['exercises.sets', 'exercises.exercise', 'changeEvents'])),
         ];
+
+        $this->logSessionOperationResult('start', 'workout.session.started', $user, $input, $result);
+
+        return $result;
     }
 
     /**
@@ -120,10 +143,14 @@ class WorkoutSessionManager
         $existingEvent = $this->idempotentEvent($user, $input);
 
         if ($existingEvent !== null) {
-            return $this->eventReplayResponse($existingEvent, 'story_event');
+            $result = $this->eventReplayResponse($existingEvent, 'story_event');
+
+            $this->logSessionOperationResult('append_story', 'workout.session.story_appended', $user, $input, $result);
+
+            return $result;
         }
 
-        return DB::transaction(function () use ($user, $input): array {
+        $result = DB::transaction(function () use ($user, $input): array {
             $existingEvent = $this->idempotentEvent($user, $input);
 
             if ($existingEvent !== null) {
@@ -152,6 +179,10 @@ class WorkoutSessionManager
                 'session' => $this->summaries->workout($session->fresh(['exercises.sets', 'exercises.exercise', 'changeEvents'])),
             ];
         }, attempts: 3);
+
+        $this->logSessionOperationResult('append_story', 'workout.session.story_appended', $user, $input, $result);
+
+        return $result;
     }
 
     /**
@@ -164,19 +195,27 @@ class WorkoutSessionManager
         $validation = $this->exerciseWriter->validateExercise($user, $exerciseInput);
 
         if ($validation !== []) {
-            return $this->refused(
+            $result = $this->refused(
                 'Workout exercise entry is structurally invalid: it needs a raw_phrase or a known exercise_id.',
                 ['unresolved_or_ambiguous_items' => $validation],
             );
+
+            $this->logSessionOperationResult('append_exercise', 'workout.session.exercise_appended', $user, $input, $result);
+
+            return $result;
         }
 
         $existingEvent = $this->idempotentEvent($user, $input);
 
         if ($existingEvent !== null) {
-            return $this->eventReplayResponse($existingEvent, 'append_event');
+            $result = $this->eventReplayResponse($existingEvent, 'append_event');
+
+            $this->logSessionOperationResult('append_exercise', 'workout.session.exercise_appended', $user, $input, $result);
+
+            return $result;
         }
 
-        return DB::transaction(function () use ($user, $input, $exerciseInput): array {
+        $result = DB::transaction(function () use ($user, $input, $exerciseInput): array {
             $existingEvent = $this->idempotentEvent($user, $input);
 
             if ($existingEvent !== null) {
@@ -215,6 +254,10 @@ class WorkoutSessionManager
                 'session' => $this->summaries->workout($session->fresh(['exercises.sets', 'exercises.exercise', 'changeEvents'])),
             ];
         }, attempts: 3);
+
+        $this->logSessionOperationResult('append_exercise', 'workout.session.exercise_appended', $user, $input, $result);
+
+        return $result;
     }
 
     /**
@@ -226,10 +269,14 @@ class WorkoutSessionManager
         $existingEvent = $this->idempotentEvent($user, $input);
 
         if ($existingEvent !== null) {
-            return $this->eventReplayResponse($existingEvent, 'finish_event');
+            $result = $this->eventReplayResponse($existingEvent, 'finish_event');
+
+            $this->logSessionOperationResult('finish', 'workout.session.finished', $user, $input, $result);
+
+            return $result;
         }
 
-        return DB::transaction(function () use ($user, $input): array {
+        $result = DB::transaction(function () use ($user, $input): array {
             $existingEvent = $this->idempotentEvent($user, $input);
 
             if ($existingEvent !== null) {
@@ -284,6 +331,10 @@ class WorkoutSessionManager
                 'session' => $this->summaries->workout($session->fresh(['exercises.sets', 'exercises.exercise', 'changeEvents'])),
             ];
         }, attempts: 3);
+
+        $this->logSessionOperationResult('finish', 'workout.session.finished', $user, $input, $result);
+
+        return $result;
     }
 
     public function activeSession(User $user, bool $lock = false): ?WorkoutSession
@@ -547,7 +598,15 @@ class WorkoutSessionManager
             'reason' => 'In-progress session was inactive past the stale window and was auto-completed.',
         ], $completedAt);
 
-        return $this->summaries->workout($session->fresh(['exercises.sets', 'exercises.exercise', 'changeEvents']));
+        $summary = $this->summaries->workout($session->fresh(['exercises.sets', 'exercises.exercise', 'changeEvents']));
+
+        $this->activity->info('workout.session.auto_finished_stale', [
+            ...$this->activity->userContext($user),
+            ...$this->activity->sessionSummaryContext($summary),
+            'completed_at' => $completedAt->toISOString(),
+        ]);
+
+        return $summary;
     }
 
     /**
@@ -586,6 +645,46 @@ class WorkoutSessionManager
     private function isOldCompletedTarget(WorkoutSession $session): bool
     {
         return $session->started_at?->lt(now()->subHours(self::RECENT_COMPLETED_TARGET_HOURS)) ?? false;
+    }
+
+    /**
+     * @param  array<string, mixed>  $input
+     * @param  array<string, mixed>  $result
+     */
+    private function logSessionOperationResult(string $operation, string $successEvent, User $user, array $input, array $result): void
+    {
+        $session = $result['session'] ?? $result['active_session'] ?? null;
+        $event = $result['story_event'] ?? $result['append_event'] ?? $result['finish_event'] ?? null;
+        $context = [
+            ...$this->activity->userContext($user),
+            ...$this->activity->workoutInputContext($input),
+            ...(is_array($session) ? $this->activity->sessionSummaryContext($session) : []),
+            'target_resolution' => $result['target_resolution'] ?? null,
+            'session_was_created' => $result['session_was_created'] ?? null,
+            'session_was_resumed' => $result['session_was_resumed'] ?? null,
+            'auto_finished_stale_session' => ($result['auto_finished_stale_session'] ?? null) !== null,
+            'appended_exercise_id' => $result['appended_exercise_id'] ?? null,
+            'event_id' => is_array($event) ? ($event['id'] ?? null) : null,
+            'event_type' => is_array($event) ? ($event['event_type'] ?? null) : null,
+        ];
+
+        if (($result['refused'] ?? false) === true) {
+            $this->activity->warning("workout.session.{$operation}.refused", [
+                ...$context,
+                'refusal_reason' => $result['refusal_reason'] ?? null,
+                'needs_confirmation' => $result['needs_confirmation'] ?? null,
+            ]);
+
+            return;
+        }
+
+        if (($result['idempotent_replay'] ?? false) === true) {
+            $this->activity->info("workout.session.{$operation}.idempotent_replay", $context);
+
+            return;
+        }
+
+        $this->activity->info($successEvent, $context);
     }
 
     /**

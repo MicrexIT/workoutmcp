@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Models\User;
+use App\Services\WorkoutMemory\WorkoutMemoryActivityLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -23,16 +24,23 @@ class AuthenticatedSessionController extends Controller
         ]);
     }
 
-    public function store(LoginRequest $request): RedirectResponse
+    public function store(LoginRequest $request, WorkoutMemoryActivityLogger $activity): RedirectResponse
     {
         $request->authenticate();
         $request->session()->regenerate();
 
+        $activity->info('auth.login.succeeded', [
+            ...$activity->userContext($request->user()),
+            'remember' => $request->boolean('remember'),
+        ], $request);
+
         return redirect()->intended(route('home'));
     }
 
-    public function destroy(Request $request): RedirectResponse
+    public function destroy(Request $request, WorkoutMemoryActivityLogger $activity): RedirectResponse
     {
+        $activity->info('auth.logout.succeeded', $activity->userContext($request->user()), $request);
+
         Auth::logout();
 
         $request->session()->invalidate();
