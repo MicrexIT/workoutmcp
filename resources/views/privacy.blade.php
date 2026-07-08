@@ -46,7 +46,7 @@
             <section class="mt-10 border-t border-chalk/10 pt-8">
                 <h2 class="font-display text-2xl uppercase">Sharing and processors</h2>
                 <p class="mt-4 text-sm leading-relaxed text-chalk-dim">
-                    Your authorized AI client receives only the tool inputs and tool responses needed for the request you make. Public workout share links are visible to anyone with the link until revoked. The service is hosted on infrastructure providers, including Hetzner for application hosting and Cloudflare for DNS, TLS proxying, and edge protection. We may disclose data if required by law or to protect the service and its users.
+                    Your authorized AI client receives only the tool inputs and tool responses needed for the request you make. Public workout share links are visible to anyone with the link until revoked. The service is hosted on infrastructure providers, including Laravel Cloud for application hosting and Cloudflare for DNS, TLS proxying, and edge protection. We may disclose data if required by law or to protect the service and its users.
                 </p>
             </section>
 
