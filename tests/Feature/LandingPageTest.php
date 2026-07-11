@@ -19,6 +19,7 @@ class LandingPageTest extends TestCase
             ->assertOk()
             ->assertSee('Workout Memory')
             ->assertSee('Workout Memory · AI workout tracker for ChatGPT and Claude')
+            ->assertDontSee('<link rel="preload" as="font"', false)
             ->assertSee('AI workout tracker and MCP server', false)
             ->assertSee('<meta property="og:image" content="'.$publicUrl.'/chatgpt-app-icon-square-1024.png">', false)
             ->assertSee('"@type":"SoftwareApplication"', false)
@@ -48,6 +49,9 @@ class LandingPageTest extends TestCase
         $this->get('/llms.txt')
             ->assertOk()
             ->assertHeader('Content-Type', 'text/plain; charset=UTF-8')
+            ->assertHeaderMissing('Set-Cookie')
+            ->assertSee('[Workout Memory]('.$publicUrl.')', false)
+            ->assertSee('['.$publicUrl.'/mcp/workout-memory]('.$publicUrl.'/mcp/workout-memory)', false)
             ->assertSee($publicUrl.'/mcp/workout-memory', false)
             ->assertSee('Model Context Protocol', false);
     }

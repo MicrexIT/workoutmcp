@@ -172,7 +172,7 @@
                     <div class="flex shrink-0 items-center">
                         @foreach ([0, 1] as $repeat)
                             @foreach (["Say it, it's logged", 'No app to open', 'Every set remembered', 'Ask months later'] as $phrase)
-                                <span class="whitespace-nowrap px-6 font-display text-2xl uppercase text-transparent [-webkit-text-stroke:1.2px_rgba(241,239,230,0.32)] sm:text-3xl">{{ $phrase }}</span>
+                                <span class="whitespace-nowrap px-6 font-display text-2xl uppercase text-transparent [-webkit-text-stroke:1.2px_rgba(241,239,230,0.5)] sm:text-3xl">{{ $phrase }}</span>
                                 <span class="text-volt">✦</span>
                             @endforeach
                         @endforeach
@@ -313,7 +313,7 @@
                                 <span class="font-mono text-sm text-volt">01</span>
                                 <div class="min-w-0 flex-1">
                                     <p class="text-sm leading-relaxed text-chalk-dim">In your browser, open <a href="https://chatgpt.com" target="_blank" rel="noopener" class="text-chalk underline decoration-volt decoration-2 underline-offset-4 transition hover:text-volt">ChatGPT</a>, then go to <span class="text-chalk">Settings → Apps &amp; Connectors → Advanced settings</span> and switch on <span class="text-chalk">Developer mode</span>. Custom connectors need a paid ChatGPT plan.</p>
-                                    <img src="{{ asset('images/docs/chatgpt-developer-mode.png') }}" alt="ChatGPT advanced settings with the Developer mode toggle switched on" loading="lazy" decoding="async" class="mt-3 w-full max-w-lg border border-chalk/15">
+                                    <img src="{{ asset('images/docs/chatgpt-developer-mode.png') }}" width="703" height="600" alt="ChatGPT advanced settings with the Developer mode toggle switched on" loading="lazy" decoding="async" class="mt-3 h-auto w-full max-w-lg border border-chalk/15">
                                 </div>
                             </li>
                             <li class="flex gap-4">
@@ -321,8 +321,8 @@
                                 <div class="min-w-0 flex-1">
                                     <p class="text-sm leading-relaxed text-chalk-dim">Back in <span class="text-chalk">Apps &amp; Connectors</span>, hit <span class="text-chalk">Create app</span>. Name it <span class="text-chalk">Workout Memory</span>, paste the server URL above, set authentication to <span class="text-chalk">OAuth</span>, and create.</p>
                                     <div class="mt-3 grid gap-3 sm:grid-cols-2">
-                                        <img src="{{ asset('images/docs/chatgpt-apps-list.png') }}" alt="ChatGPT app preferences showing the enabled apps list and the Create app button" loading="lazy" decoding="async" class="w-full border border-chalk/15">
-                                        <img src="{{ asset('images/docs/chatgpt-new-app.png') }}" alt="ChatGPT New App dialog with the server URL pasted, OAuth authentication selected, and the risk checkbox ticked" loading="lazy" decoding="async" class="w-full border border-chalk/15">
+                                        <img src="{{ asset('images/docs/chatgpt-apps-list.png') }}" width="704" height="627" alt="ChatGPT app preferences showing the enabled apps list and the Create app button" loading="lazy" decoding="async" class="h-auto w-full border border-chalk/15">
+                                        <img src="{{ asset('images/docs/chatgpt-new-app.png') }}" width="490" height="805" alt="ChatGPT New App dialog with the server URL pasted, OAuth authentication selected, and the risk checkbox ticked" loading="lazy" decoding="async" class="h-auto w-full border border-chalk/15">
                                     </div>
                                 </div>
                             </li>
@@ -330,7 +330,7 @@
                                 <span class="font-mono text-sm text-volt">03</span>
                                 <div class="min-w-0 flex-1">
                                     <p class="text-sm leading-relaxed text-chalk-dim">In a new chat, enable the connector (under developer-mode tools), then sign in here and approve when ChatGPT asks. Once connected, the app shows up in <span class="text-chalk">Settings → Apps</span> like this:</p>
-                                    <img src="{{ asset('images/docs/chatgpt-app-connected.png') }}" alt="ChatGPT app detail page showing the connected Workout Memory app with OAuth authorization and permission preferences" loading="lazy" decoding="async" class="mt-3 w-full max-w-lg border border-chalk/15">
+                                    <img src="{{ asset('images/docs/chatgpt-app-connected.png') }}" width="680" height="597" alt="ChatGPT app detail page showing the connected Workout Memory app with OAuth authorization and permission preferences" loading="lazy" decoding="async" class="mt-3 h-auto w-full max-w-lg border border-chalk/15">
                                 </div>
                             </li>
                             <li class="flex gap-4"><span class="font-mono text-sm text-volt">04</span><p class="text-sm leading-relaxed text-chalk-dim">Say <span class="font-mono text-chalk">“log today's workout: …”</span> and that's it.</p></li>
@@ -349,14 +349,14 @@
                                 <span class="font-mono text-sm text-volt">01</span>
                                 <div class="min-w-0 flex-1">
                                     <p class="text-sm leading-relaxed text-chalk-dim">In your browser, open <a href="https://claude.ai/customize/connectors" target="_blank" rel="noopener" class="text-chalk underline decoration-volt decoration-2 underline-offset-4 transition hover:text-volt">Claude Connectors</a> and click <span class="text-chalk">Add</span> → <span class="text-chalk">Add custom connector</span>.</p>
-                                    <img src="{{ asset('images/docs/claude-add-custom-connector.png') }}" alt="Claude connectors settings with the Add menu open showing the Add custom connector option" loading="lazy" decoding="async" class="mt-3 w-full max-w-lg border border-chalk/15">
+                                    <img src="{{ asset('images/docs/claude-add-custom-connector.png') }}" width="1021" height="778" alt="Claude connectors settings with the Add menu open showing the Add custom connector option" loading="lazy" decoding="async" class="mt-3 h-auto w-full max-w-lg border border-chalk/15">
                                 </div>
                             </li>
                             <li class="flex gap-4">
                                 <span class="font-mono text-sm text-volt">02</span>
                                 <div class="min-w-0 flex-1">
                                     <p class="text-sm leading-relaxed text-chalk-dim">Name it <span class="text-chalk">Workout Memory</span>, paste the server URL above, and add it. Leave the advanced OAuth fields empty.</p>
-                                    <img src="{{ asset('images/docs/claude-connector-dialog.png') }}" alt="Claude Add custom connector dialog with a name and the server URL filled in" loading="lazy" decoding="async" class="mt-3 w-full max-w-lg border border-chalk/15">
+                                    <img src="{{ asset('images/docs/claude-connector-dialog.png') }}" width="1001" height="750" alt="Claude Add custom connector dialog with a name and the server URL filled in" loading="lazy" decoding="async" class="mt-3 h-auto w-full max-w-lg border border-chalk/15">
                                 </div>
                             </li>
                             <li class="flex gap-4"><span class="font-mono text-sm text-volt">03</span><p class="text-sm leading-relaxed text-chalk-dim">Hit <span class="text-chalk">Connect</span>, sign in here, approve. Done.</p></li>

@@ -11,12 +11,15 @@ export default defineConfig({
             fonts: [
                 bunny('Instrument Sans', {
                     weights: [400, 500, 600],
+                    preload: false,
                 }),
                 bunny('Anton', {
                     weights: [400],
+                    preload: false,
                 }),
                 bunny('IBM Plex Mono', {
                     weights: [400, 500, 600],
+                    preload: false,
                 }),
             ],
         }),

@@ -102,7 +102,12 @@ Route::get('/llms.txt', function () {
             'mcpUrl' => $publicUrl.'/mcp/workout-memory',
         ])
         ->header('Content-Type', 'text/plain; charset=UTF-8');
-})->middleware('throttle:public')->name('llms');
+})->withoutMiddleware($statelessPublicMiddleware)
+    ->middleware([
+        'throttle:public',
+        'cache.headers:public;max_age=3600;s_maxage=86400;stale_while_revalidate=604800;etag',
+    ])
+    ->name('llms');
 
 Route::get('/.well-known/openai-apps-challenge', function () {
     return response('2XJII9pcsvG0iSUnuTQTm7PUOP8jT41dSBPzRUxxJZE')
