@@ -103,7 +103,7 @@
         {{-- ============ HERO ============ --}}
         <section class="relative overflow-hidden">
             <div aria-hidden="true" class="absolute inset-0 bg-[radial-gradient(58%_48%_at_50%_0%,rgba(216,244,59,0.10),transparent_70%)]"></div>
-            <div class="relative mx-auto grid max-w-6xl items-center gap-14 px-5 py-16 sm:px-8 lg:grid-cols-[1.05fr_0.95fr] lg:py-24">
+            <div class="relative mx-auto grid max-w-6xl items-center gap-14 px-5 py-16 sm:px-8 lg:grid-cols-[1.05fr_0.95fr] lg:items-start lg:py-24">
                 <div>
                     <p class="font-mono text-xs uppercase tracking-[0.28em] text-volt">An MCP server for ChatGPT, Claude + any AI that speaks MCP</p>
                     <h1 class="mt-5 font-display text-[clamp(2.9rem,6vw,5.2rem)] uppercase leading-[0.94]">
@@ -123,7 +123,7 @@
                 </div>
 
                 {{-- Chat artifact --}}
-                <div class="relative">
+                <div class="relative lg:pt-12">
                     <div class="-rotate-1 border border-chalk/15 bg-ink-raised/90 p-5 shadow-[12px_12px_0_rgba(216,244,59,0.14)] sm:p-6">
                         <div class="flex items-center justify-between border-b border-chalk/10 pb-3 font-mono text-[10px] uppercase tracking-[0.2em] text-chalk-dim">
                             <span>your ai · any chat</span>

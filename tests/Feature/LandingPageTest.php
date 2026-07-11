@@ -20,6 +20,8 @@ class LandingPageTest extends TestCase
             ->assertSee('Workout Memory')
             ->assertSee('Workout Memory · AI workout tracker for ChatGPT and Claude')
             ->assertDontSee('<link rel="preload" as="font"', false)
+            ->assertSee('lg:items-start', false)
+            ->assertSee('lg:pt-12', false)
             ->assertSee('AI workout tracker and MCP server', false)
             ->assertSee('<meta property="og:image" content="'.$publicUrl.'/chatgpt-app-icon-square-1024.png">', false)
             ->assertSee('"@type":"SoftwareApplication"', false)
