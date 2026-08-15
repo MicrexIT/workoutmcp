@@ -11,12 +11,14 @@ use Laravel\Mcp\Request;
 use Laravel\Mcp\ResponseFactory;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Attributes\Name;
+use Laravel\Mcp\Server\Attributes\Title;
 use Laravel\Mcp\Server\Tool;
 use Laravel\Mcp\Server\Tools\Annotations\IsDestructive;
 use Laravel\Mcp\Server\Tools\Annotations\IsOpenWorld;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 
 #[Name('list_recent_workouts')]
+#[Title('List Recent Workouts')]
 #[Description('Return recent completed workout summaries for planning and recall. When stale_active_session is present, recap it to the user and ask whether to finish it.')]
 #[IsReadOnly]
 #[IsDestructive(false)]

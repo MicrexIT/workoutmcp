@@ -99,7 +99,7 @@
         "destructiveHint": false
       },
       "justifications": {
-        "read_only_justification": "Marks the user's active private workout session as completed and may store final notes, effort, bodyweight, and completion time.",
+        "read_only_justification": "Marks the user's active private workout session as completed and may store final notes, effort, and completion time.",
         "open_world_justification": "Changes only private Workout Memory account data and cannot publish externally visible content.",
         "destructive_justification": "Does not delete records; a mistakenly completed session can be reopened with update_workout."
       }

@@ -10,6 +10,7 @@ use Laravel\Mcp\Request;
 use Laravel\Mcp\ResponseFactory;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Attributes\Name;
+use Laravel\Mcp\Server\Attributes\Title;
 use Laravel\Mcp\Server\Tool;
 use Laravel\Mcp\Server\Tools\Annotations\IsDestructive;
 use Laravel\Mcp\Server\Tools\Annotations\IsIdempotent;
@@ -17,7 +18,8 @@ use Laravel\Mcp\Server\Tools\Annotations\IsOpenWorld;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 
 #[Name('update_workout')]
-#[Description('Correct a logged workout in place with ordered operations: update_session (rename, re-date to when it really happened, notes, effort, bodyweight); add_exercise (a genuinely missing entry; same shape and server-side resolution as log_workout entries — never a corrected duplicate of an existing entry); update_exercise (THE way to fix a wrong entry — it remaps in place and keeps the sets: send the user\'s corrected wording as raw_phrase — resolved server-side, flagged auto-create as last resort, never refused — or an explicit exercise_id, which is authoritative and applied even when the entry\'s old wording resolves elsewhere; set remember_phrase=true when the user confirms the wording always means that exercise; an unchanged correction is reported with a hint); add_set / update_set / remove_set; remove_exercise (delete an entry that should not exist at all, e.g. a duplicate — to swap a wrong exercise use update_exercise instead); reopen_session (set a wrongly-completed workout back to in_progress so live appends target it again); merge_workout (absorb another workout that was really the same session into this one, deleting the emptied source). remove_exercise, remove_set, and merge_workout require user_confirmed_destructive_change=true; the user\'s own request to delete, replace, or merge counts as that confirmation — ask first only for removals they did not ask for. A refused call applies none of its operations. Fetch workout_exercise_id / workout_set_id values from get_workout or the logging response first; field-level details are described in the operations schema.')]
+#[Title('Update Workout')]
+#[Description('Correct a logged workout in place with ordered operations: update_session (rename, re-date to when it really happened, notes, effort); add_exercise (a genuinely missing entry; same shape and server-side resolution as log_workout entries — never a corrected duplicate of an existing entry); update_exercise (THE way to fix a wrong entry — it remaps in place and keeps the sets: send the user\'s corrected wording as raw_phrase — resolved server-side, flagged auto-create as last resort, never refused — or an explicit exercise_id, which is authoritative and applied even when the entry\'s old wording resolves elsewhere; set remember_phrase=true when the user confirms the wording always means that exercise; an unchanged correction is reported with a hint); add_set / update_set / remove_set; remove_exercise (delete an entry that should not exist at all, e.g. a duplicate — to swap a wrong exercise use update_exercise instead); reopen_session (set a wrongly-completed workout back to in_progress so live appends target it again); merge_workout (absorb another workout that was really the same session into this one, deleting the emptied source). remove_exercise, remove_set, and merge_workout require user_confirmed_destructive_change=true; the user\'s own request to delete, replace, or merge counts as that confirmation — ask first only for removals they did not ask for. A refused call applies none of its operations. Fetch workout_exercise_id / workout_set_id values from get_workout or the logging response first; field-level details are described in the operations schema.')]
 #[IsReadOnly(false)]
 #[IsDestructive]
 #[IsOpenWorld(false)]
@@ -87,8 +89,6 @@ class UpdateWorkoutTool extends Tool
                 'kind' => $schema->string()->nullable()->description('update_session.'),
                 'perceived_effort' => $schema->integer()->nullable()->description('update_session: 1-10 session effort.'),
                 'occurred_at' => $schema->string()->nullable()->description('update_session: move the workout to when it really happened (ISO 8601).'),
-                'bodyweight_value' => $schema->number()->nullable()->description('update_session.'),
-                'bodyweight_unit' => $schema->string()->enum(['kg', 'lb'])->nullable()->description('update_session.'),
                 'sort_order' => $schema->integer()->nullable()->description('add_exercise: optional position within the workout.'),
                 'variant_label' => $schema->string()->nullable()->description('add_exercise/update_exercise.'),
                 'variant_description' => $schema->string()->nullable()->description('add_exercise/update_exercise.'),

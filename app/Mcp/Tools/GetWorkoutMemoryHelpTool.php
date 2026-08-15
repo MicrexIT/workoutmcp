@@ -8,12 +8,14 @@ use Laravel\Mcp\Response;
 use Laravel\Mcp\ResponseFactory;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Attributes\Name;
+use Laravel\Mcp\Server\Attributes\Title;
 use Laravel\Mcp\Server\Tool;
 use Laravel\Mcp\Server\Tools\Annotations\IsDestructive;
 use Laravel\Mcp\Server\Tools\Annotations\IsOpenWorld;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 
 #[Name('get_workout_memory_help')]
+#[Title('Workout Memory Help')]
 #[Description('Return a concise quickstart for Workout Memory. Use when the user asks for help, asks what they can do, appears new, or wants to add old workouts from notes, text, tables, or CSV-like data.')]
 #[IsReadOnly]
 #[IsDestructive(false)]
@@ -47,7 +49,7 @@ class GetWorkoutMemoryHelpTool extends Tool
                     ],
                     'profile_setup' => [
                         'label' => 'Set training context',
-                        'how_to_start' => 'Tell the assistant durable goals, injuries or constraints, preferred units, timezone, and available equipment.',
+                        'how_to_start' => 'Tell the assistant durable goals, preferred units, timezone, and available equipment.',
                         'assistant_behavior' => 'Use update_user_context for stable preferences, not one-off workout constraints.',
                     ],
                     'corrections' => [

@@ -14,7 +14,6 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
     'preferred_distance_unit',
     'timezone',
     'goals',
-    'injuries_constraints',
     'available_equipment',
     'notes',
 ])]

@@ -9,6 +9,7 @@ use Laravel\Mcp\Request;
 use Laravel\Mcp\ResponseFactory;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Attributes\Name;
+use Laravel\Mcp\Server\Attributes\Title;
 use Laravel\Mcp\Server\Tool;
 use Laravel\Mcp\Server\Tools\Annotations\IsDestructive;
 use Laravel\Mcp\Server\Tools\Annotations\IsIdempotent;
@@ -16,7 +17,8 @@ use Laravel\Mcp\Server\Tools\Annotations\IsOpenWorld;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 
 #[Name('update_user_context')]
-#[Description('Update durable user training preferences, goals, constraints, available equipment, or notes. Do not use for one-off workout constraints.')]
+#[Title('Update Training Profile')]
+#[Description('Update durable user training preferences, goals, available equipment, or notes. Do not use for one-off workout constraints, and do not record health or medical information here.')]
 #[IsReadOnly(false)]
 #[IsDestructive(false)]
 #[IsOpenWorld(false)]
@@ -32,7 +34,6 @@ class UpdateUserContextTool extends Tool
             'preferred_distance_unit' => ['sometimes', 'in:m,km,mi'],
             'timezone' => ['sometimes', 'string', 'max:80'],
             'goals' => ['sometimes', 'nullable', 'string'],
-            'injuries_constraints' => ['sometimes', 'nullable', 'string'],
             'available_equipment' => ['sometimes', 'array'],
             'available_equipment.*' => ['string', 'max:80'],
             'notes' => ['sometimes', 'nullable', 'string'],
@@ -48,11 +49,10 @@ class UpdateUserContextTool extends Tool
     public function schema(JsonSchema $schema): array
     {
         return [
-            'preferred_weight_unit' => $schema->string()->enum(['kg', 'lb'])->description('Preferred body/load unit.'),
+            'preferred_weight_unit' => $schema->string()->enum(['kg', 'lb'])->description('Preferred load unit.'),
             'preferred_distance_unit' => $schema->string()->enum(['m', 'km', 'mi'])->description('Preferred distance unit.'),
             'timezone' => $schema->string()->description('IANA timezone.'),
             'goals' => $schema->string()->nullable()->description('Durable training goals.'),
-            'injuries_constraints' => $schema->string()->nullable()->description('Durable constraints or injuries.'),
             'available_equipment' => $schema->array()->items($schema->string())->description('Stable equipment usually available.'),
             'notes' => $schema->string()->nullable()->description('Other stable planning notes.'),
         ];

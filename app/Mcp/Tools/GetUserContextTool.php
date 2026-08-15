@@ -9,13 +9,15 @@ use Illuminate\Contracts\JsonSchema\JsonSchema;
 use Laravel\Mcp\ResponseFactory;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Attributes\Name;
+use Laravel\Mcp\Server\Attributes\Title;
 use Laravel\Mcp\Server\Tool;
 use Laravel\Mcp\Server\Tools\Annotations\IsDestructive;
 use Laravel\Mcp\Server\Tools\Annotations\IsOpenWorld;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 
 #[Name('get_user_context')]
-#[Description('Return stable user profile, units, goals, constraints, equipment, and notes needed for workout planning and logging.')]
+#[Title('View Training Profile')]
+#[Description('Return stable user profile, units, goals, equipment, and notes needed for workout planning and logging.')]
 #[IsReadOnly]
 #[IsDestructive(false)]
 #[IsOpenWorld(false)]
@@ -48,7 +50,6 @@ class GetUserContextTool extends Tool
                 'preferred_distance_unit' => $profile?->preferred_distance_unit ?? 'm',
                 'timezone' => $profile?->timezone ?? 'UTC',
                 'goals' => $profile?->goals,
-                'injuries_constraints' => $profile?->injuries_constraints,
                 'available_equipment' => $availableEquipment,
                 'notes' => $profile?->notes,
             ],

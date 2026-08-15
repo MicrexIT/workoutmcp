@@ -10,6 +10,7 @@ use Laravel\Mcp\Request;
 use Laravel\Mcp\ResponseFactory;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Attributes\Name;
+use Laravel\Mcp\Server\Attributes\Title;
 use Laravel\Mcp\Server\Tool;
 use Laravel\Mcp\Server\Tools\Annotations\IsDestructive;
 use Laravel\Mcp\Server\Tools\Annotations\IsIdempotent;
@@ -17,7 +18,8 @@ use Laravel\Mcp\Server\Tools\Annotations\IsOpenWorld;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 
 #[Name('append_session_story')]
-#[Description('Append narrative context to a live or recent workout without creating sets, for notes like "started leg press", "knee felt tight", or "resting". Defaults to active_or_new for current live-session comments. Use target_session=latest_completed only when the user clearly means the just-finished/last completed session. Use log_workout instead for an older completed workout. Provide a unique per-story idempotency_key.')]
+#[Title('Add Session Notes')]
+#[Description('Append narrative context to a live or recent workout without creating sets, for notes like "started leg press", "moved to the squat rack", or "resting". Defaults to active_or_new for current live-session comments. Use target_session=latest_completed only when the user clearly means the just-finished/last completed session. Use log_workout instead for an older completed workout. Provide a unique per-story idempotency_key.')]
 #[IsReadOnly(false)]
 #[IsDestructive(false)]
 #[IsOpenWorld(false)]

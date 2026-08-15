@@ -37,7 +37,9 @@ use App\Services\WorkoutMemory\WorkoutUpdater;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\JsonSchema\JsonSchemaTypeFactory;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Testing\Fluent\AssertableJson;
+use Laravel\Mcp\Server\Attributes\Title;
 use Laravel\Mcp\Server\Methods\ListPrompts;
 use Laravel\Mcp\Server\Methods\ListResources;
 use Laravel\Mcp\Server\Methods\ListTools;
@@ -1534,6 +1536,10 @@ SQL);
                 'weak spots',
                 '3 to 6 practical next steps',
                 'Do not diagnose injuries',
+            ])
+            ->assertDontSee([
+                'goals, constraints',
+                'injury constraint',
             ]);
     }
 
@@ -1962,11 +1968,54 @@ SQL);
             $tool = app($class)->toArray();
 
             $this->assertNotEmpty($tool['title'], "{$class} is missing a title.");
+            $this->assertNotEmpty(
+                (new \ReflectionClass($class))->getAttributes(Title::class),
+                "{$class} has no explicit #[Title] attribute and would fall back to a class-derived title.",
+            );
+            $this->assertStringNotContainsString(
+                'Tool',
+                $tool['title'],
+                "{$class} exposes a class-derived title rather than a human-readable one.",
+            );
             $this->assertNotEmpty($tool['description'], "{$class} is missing a description.");
             $this->assertArrayHasKey('readOnlyHint', (array) $tool['annotations'], "{$class} is missing readOnlyHint.");
             $this->assertArrayHasKey('destructiveHint', (array) $tool['annotations'], "{$class} is missing destructiveHint.");
             $this->assertArrayHasKey('openWorldHint', (array) $tool['annotations'], "{$class} is missing openWorldHint.");
         }
+    }
+
+    public function test_no_personal_health_data_is_stored_or_solicited(): void
+    {
+        $this->assertFalse(
+            Schema::hasColumn('workout_sessions', 'bodyweight_kg'),
+            'workout_sessions.bodyweight_kg is personal health data and must stay dropped.',
+        );
+        $this->assertFalse(
+            Schema::hasColumn('user_profiles', 'injuries_constraints'),
+            'user_profiles.injuries_constraints is personal health data and must stay dropped.',
+        );
+
+        $server = app()->make(WorkoutMemoryServer::class, ['transport' => new FakeTransporter]);
+        $response = (new ListTools)->handle(
+            new JsonRpcRequest('tools-list', 'tools/list', []),
+            $server->createContext(),
+        )->toArray();
+
+        $advertised = json_encode($response['result']['tools']);
+
+        foreach (['bodyweight_kg', 'bodyweight_value', 'bodyweight_unit', 'injuries_constraints'] as $field) {
+            $this->assertStringNotContainsString(
+                $field,
+                (string) $advertised,
+                "The {$field} field must not be advertised in any tool schema or description.",
+            );
+        }
+
+        $this->assertStringNotContainsString(
+            'injur',
+            strtolower((string) $advertised),
+            'No tool may invite the user to record injuries.',
+        );
     }
 
     public function test_default_tools_list_response_contains_every_registered_tool(): void
@@ -1987,6 +2036,12 @@ SQL);
         $this->assertContains('share_workout', $toolNames);
         $this->assertContains('show_workout_history', $toolNames);
         $this->assertArrayNotHasKey('nextCursor', $response['result']);
+
+        $titles = collect($response['result']['tools'])->pluck('title', 'name');
+
+        $this->assertSame('Log Workout', $titles['log_workout']);
+        $this->assertSame('Delete Workout', $titles['delete_workout']);
+        $this->assertSame('Share Workout Publicly', $titles['share_workout']);
     }
 
     public function test_workout_history_app_tool_and_resource_are_registered(): void

@@ -231,13 +231,6 @@ class WorkoutUpdater
             $updates['started_at'] = $operation['occurred_at'];
         }
 
-        if (array_key_exists('bodyweight_value', $operation)) {
-            $updates['bodyweight_kg'] = $this->unitNormalizer->normalizeBodyweight(
-                $operation['bodyweight_value'] === null ? null : (float) $operation['bodyweight_value'],
-                $operation['bodyweight_unit'] ?? null,
-            );
-        }
-
         if ($updates !== []) {
             $session->update($updates);
         }

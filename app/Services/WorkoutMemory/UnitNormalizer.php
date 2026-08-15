@@ -28,9 +28,4 @@ class UnitNormalizer
             default => round($value, 2),
         };
     }
-
-    public function normalizeBodyweight(?float $value, ?string $unit): ?float
-    {
-        return $this->normalizeLoad($value, $unit);
-    }
 }

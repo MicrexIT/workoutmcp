@@ -103,10 +103,6 @@ class WorkoutLogger
                 'kind' => $input['kind'] ?? 'mixed',
                 'source' => 'chatgpt',
                 'perceived_effort' => $input['perceived_effort'] ?? null,
-                'bodyweight_kg' => $this->unitNormalizer->normalizeBodyweight(
-                    isset($input['bodyweight_value']) ? (float) $input['bodyweight_value'] : null,
-                    $input['bodyweight_unit'] ?? null,
-                ),
                 'notes' => $input['notes'] ?? null,
                 'raw_input' => $input['raw_input'] ?? null,
                 'source_message_id' => $input['source_message_id'] ?? null,

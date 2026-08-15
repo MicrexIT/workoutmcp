@@ -10,6 +10,7 @@ use Laravel\Mcp\Request;
 use Laravel\Mcp\ResponseFactory;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Attributes\Name;
+use Laravel\Mcp\Server\Attributes\Title;
 use Laravel\Mcp\Server\Tool;
 use Laravel\Mcp\Server\Tools\Annotations\IsDestructive;
 use Laravel\Mcp\Server\Tools\Annotations\IsIdempotent;
@@ -17,6 +18,7 @@ use Laravel\Mcp\Server\Tools\Annotations\IsOpenWorld;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 
 #[Name('share_workout')]
+#[Title('Share Workout Publicly')]
 #[Description('Create a public, revocable share link for a completed workout. Returns share_url plus share_text, a ready-to-paste message for the user. Call it only when the user explicitly asks to share: offer sharing after a workout is logged or finished (especially on a new best), never create links unprompted. Defaults to the most recent completed workout when workout_session_id is omitted. Refuses in-progress sessions; finish_workout_session first. Re-sharing an already-shared workout returns the same active link. Links are revocable from the web dashboard and die when the workout is deleted.')]
 #[IsReadOnly(false)]
 #[IsDestructive(false)]

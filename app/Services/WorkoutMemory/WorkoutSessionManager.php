@@ -308,13 +308,6 @@ class WorkoutSessionManager
                 }
             }
 
-            if (array_key_exists('bodyweight_value', $input)) {
-                $updates['bodyweight_kg'] = $this->unitNormalizer->normalizeBodyweight(
-                    $input['bodyweight_value'] === null ? null : (float) $input['bodyweight_value'],
-                    $input['bodyweight_unit'] ?? null,
-                );
-            }
-
             $session->update($updates);
             $this->namer->applyGeneratedNameIfPlaceholder($session);
 

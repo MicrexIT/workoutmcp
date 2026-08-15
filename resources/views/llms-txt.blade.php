@@ -19,7 +19,7 @@ Product site: [Workout Memory]({{ $publicUrl }})
 
 ## What the server exposes
 
-20 tools for logging and recalling workouts, including: quickstart help, logging completed workouts from natural language, live in-progress sessions (start, append exercises and notes, finish), adding previous sessions from pasted notes, tables, or CSV-like data by splitting them into normal per-session workout logs, exercise search and resolution with per-user phrase memory, per-exercise history with best efforts when relevant, training summaries for planning, durable user context (goals, injuries, available equipment), workout update, merge and delete, and revocable public share links for completed workouts (share_workout, on explicit user request only).
+23 tools for logging and recalling workouts, including: quickstart help, logging completed workouts from natural language, live in-progress sessions (start, append exercises and notes, finish), adding previous sessions from pasted notes, tables, or CSV-like data by splitting them into normal per-session workout logs, exercise search and resolution with per-user phrase memory, per-exercise history with best efforts when relevant, training summaries for planning, durable user context (goals, preferred units, available equipment), workout update, merge and delete, and revocable public share links for completed workouts (share_workout, on explicit user request only).
 
 ## Notes for agents
 

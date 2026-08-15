@@ -176,6 +176,18 @@ class LandingPageTest extends TestCase
         $this->assertGreaterThan(0, filesize($path));
     }
 
+    public function test_social_and_directory_icon_exists_at_the_advertised_public_path(): void
+    {
+        $path = public_path('chatgpt-app-icon-square-1024.png');
+
+        $this->assertFileExists($path, 'The og:image and schema.org logo URL must resolve to a real file.');
+
+        [$width, $height] = getimagesize($path);
+
+        $this->assertSame(1024, $width);
+        $this->assertSame(1024, $height);
+    }
+
     public function test_landing_shows_closed_notice_when_registration_is_closed(): void
     {
         config(['workout_memory.registration.enabled' => false]);

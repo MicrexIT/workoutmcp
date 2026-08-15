@@ -35,7 +35,6 @@ class TrainingSummaryService
             'completed_at' => $session->completed_at?->toISOString(),
             'timezone' => $session->occurred_timezone,
             'perceived_effort' => $session->perceived_effort,
-            'bodyweight_kg' => $session->bodyweight_kg,
             'notes' => $session->notes,
             'raw_input' => $session->raw_input,
             'events' => $session->changeEvents

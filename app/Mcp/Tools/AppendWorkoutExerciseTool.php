@@ -11,6 +11,7 @@ use Laravel\Mcp\Request;
 use Laravel\Mcp\ResponseFactory;
 use Laravel\Mcp\Server\Attributes\Description;
 use Laravel\Mcp\Server\Attributes\Name;
+use Laravel\Mcp\Server\Attributes\Title;
 use Laravel\Mcp\Server\Tool;
 use Laravel\Mcp\Server\Tools\Annotations\IsDestructive;
 use Laravel\Mcp\Server\Tools\Annotations\IsIdempotent;
@@ -18,6 +19,7 @@ use Laravel\Mcp\Server\Tools\Annotations\IsOpenWorld;
 use Laravel\Mcp\Server\Tools\Annotations\IsReadOnly;
 
 #[Name('append_workout_exercise')]
+#[Title('Add Exercise To Session')]
 #[Description('Append one finished exercise block with sets to an active session or a recent completed "last session". Always send the exercise raw_phrase; exercise_id and resolution_id are optional hints — never invent ids or use position numbers; omit exercise_id when unsure. For repeated identical sets such as 5x5 at 100 kg, prefer compact fields on the exercise entry: set_count, reps, load_value, and load_unit; use sets only when sets differ. The server resolves phrases itself and never drops the entry — as a last resort it creates a clearly-flagged exercise reported in auto_created_exercises. Hints contradicting the raw_phrase are ignored and reported in ignored_exercise_hints. Defaults to target_session=active_or_new for live workout phrases like "log leg press now". Use target_session=latest_completed when the user says "add this to the last session" or the session was just logged/completed. Use log_workout for a separate completed workout from earlier. Appending is for exercises missing from the session — never append a "corrected" or "superseding" duplicate of an entry that is already there: fix the original entry with update_workout (update_exercise to swap the exercise keeping its sets, update_set / add_set for numbers, remove_exercise for true duplicates). Provide a stable per-exercise idempotency_key such as "<message_id>:append:leg-press".')]
 #[IsReadOnly(false)]
 #[IsDestructive(false)]

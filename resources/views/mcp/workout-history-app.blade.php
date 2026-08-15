@@ -641,7 +641,6 @@
                     workout.status ?? "unknown",
                     `${workout.set_count ?? 0} sets`,
                     workout.perceived_effort ? `RPE ${workout.perceived_effort}` : null,
-                    workout.bodyweight_kg ? `${workout.bodyweight_kg} kg bodyweight` : null,
                 ].filter(Boolean).join(" / ");
 
                 titleRow.append(title, date);

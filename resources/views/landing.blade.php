@@ -264,7 +264,7 @@
                     </div>
                     <div class="bg-ink p-7">
                         <p class="font-mono text-xs text-volt">training_context</p>
-                        <p class="mt-3 text-sm leading-relaxed text-chalk-dim">Goals, injuries and constraints, the equipment you actually have, so plans fit your reality.</p>
+                        <p class="mt-3 text-sm leading-relaxed text-chalk-dim">Goals, preferred units, the equipment you actually have, so plans fit your reality.</p>
                     </div>
                     <div class="bg-ink p-7">
                         <p class="font-mono text-xs text-volt">full_control</p>

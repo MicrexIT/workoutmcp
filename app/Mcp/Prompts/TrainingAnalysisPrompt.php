@@ -46,7 +46,7 @@ Analyze the user's Workout Memory history and suggest useful training improvemen
 {$goalGuidance}
 
 Use the MCP data before advising:
-1. Call get_user_context for durable goals, constraints, equipment, units, and preferences.
+1. Call get_user_context for durable goals, equipment, units, and preferences.
 2. Call get_training_summary for recent volume, frequency, exercise trends, and notable efforts.
 3. Use list_recent_workouts, get_workout, or get_exercise_history when you need evidence for a specific claim.
 
@@ -58,7 +58,7 @@ Look for:
 - imbalance between strength, skill, conditioning, and mobility work;
 - data quality gaps that make conclusions uncertain.
 
-Separate observations from recommendations. Tie each major observation to evidence from the tools, and say when the data is too sparse or inconsistent to support a firm conclusion. If a missing goal, injury constraint, or date range would materially change the advice, ask one focused follow-up question before giving detailed programming advice.
+Separate observations from recommendations. Tie each major observation to evidence from the tools, and say when the data is too sparse or inconsistent to support a firm conclusion. If a missing goal or date range would materially change the advice, ask one focused follow-up question before giving detailed programming advice.
 
 Give the user a concise review with evidence-backed observations, clear caveats, and 3 to 6 practical next steps. Prefer small changes they can apply in the next week. Do not diagnose injuries or present medical advice. Do not save a plan or log a workout unless the user explicitly asks.
 PROMPT);

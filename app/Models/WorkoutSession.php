@@ -20,7 +20,6 @@ use Illuminate\Database\Eloquent\SoftDeletes;
     'kind',
     'source',
     'perceived_effort',
-    'bodyweight_kg',
     'notes',
     'raw_input',
     'source_message_id',
@@ -36,7 +35,6 @@ class WorkoutSession extends Model
         return [
             'started_at' => 'datetime',
             'completed_at' => 'datetime',
-            'bodyweight_kg' => 'float',
         ];
     }
 
