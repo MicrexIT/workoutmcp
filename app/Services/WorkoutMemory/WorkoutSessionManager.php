@@ -473,7 +473,7 @@ class WorkoutSessionManager
             return null;
         }
 
-        return WorkoutSession::query()
+        return WorkoutSession::withTrashed()
             ->where('user_id', $user->id)
             ->where(function ($query) use ($input): void {
                 if (! empty($input['idempotency_key'])) {

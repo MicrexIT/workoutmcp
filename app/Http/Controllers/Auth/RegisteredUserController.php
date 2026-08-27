@@ -10,7 +10,9 @@ use App\Services\WorkoutMemory\WorkoutMemoryActivityLogger;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
+use Throwable;
 
 class RegisteredUserController extends Controller
 {
@@ -27,10 +29,25 @@ class RegisteredUserController extends Controller
     public function store(RegisterUserRequest $request, CurrentUserResolver $users, WorkoutMemoryActivityLogger $activity): RedirectResponse
     {
         $wasFirstAccount = User::query()->doesntExist();
-        $user = User::query()->create($request->safe()->only(['name', 'email', 'password']));
 
-        $users->withProfile($user);
-        event(new Registered($user));
+        try {
+            $user = DB::transaction(function () use ($request, $users): User {
+                $user = User::query()->create($request->safe()->only(['name', 'email', 'password']));
+
+                $users->withProfile($user);
+                event(new Registered($user));
+
+                return $user;
+            });
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return redirect()->route('register')
+                ->withInput($request->safe()->only(['name', 'email']))
+                ->withErrors([
+                    'email' => 'We could not create your account. Please try again.',
+                ]);
+        }
 
         Auth::login($user);
         $request->session()->regenerate();

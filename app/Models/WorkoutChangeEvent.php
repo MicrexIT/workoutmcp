@@ -38,6 +38,6 @@ class WorkoutChangeEvent extends Model
 
     public function session(): BelongsTo
     {
-        return $this->belongsTo(WorkoutSession::class, 'workout_session_id');
+        return $this->belongsTo(WorkoutSession::class, 'workout_session_id')->withTrashed();
     }
 }

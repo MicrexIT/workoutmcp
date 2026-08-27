@@ -4,14 +4,18 @@ namespace Tests\Feature\Auth;
 
 use App\Models\User;
 use App\Providers\AppServiceProvider;
+use Illuminate\Auth\Events\Registered;
 use Illuminate\Auth\Notifications\VerifyEmail;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
 use Illuminate\Mail\Transport\ResendTransport;
+use Illuminate\Support\Env;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\URL;
+use RuntimeException;
 use Tests\TestCase;
 
 class AuthenticationTest extends TestCase
@@ -52,6 +56,33 @@ class AuthenticationTest extends TestCase
             'timezone' => 'Europe/Paris',
         ]);
         Notification::assertSentTo($user, VerifyEmail::class);
+    }
+
+    public function test_registration_failure_rolls_back_the_account_and_returns_a_form_error(): void
+    {
+        Notification::fake();
+        Event::listen(Registered::class, function (): never {
+            throw new RuntimeException('The verification email could not be sent.');
+        });
+
+        $this->from(route('register'))
+            ->post(route('register.store'), [
+                'name' => 'Michele',
+                'email' => 'michele@example.com',
+                'password' => 'very-secure-password',
+                'password_confirmation' => 'very-secure-password',
+            ])
+            ->assertRedirect(route('register'))
+            ->assertSessionHasErrors([
+                'email' => 'We could not create your account. Please try again.',
+            ])
+            ->assertSessionHasInput('name', 'Michele')
+            ->assertSessionHasInput('email', 'michele@example.com')
+            ->assertSessionMissing('_old_input.password');
+
+        $this->assertGuest();
+        $this->assertDatabaseCount('users', 0);
+        $this->assertDatabaseCount('user_profiles', 0);
     }
 
     public function test_first_account_registration_preserves_intended_oauth_request_until_verification(): void
@@ -220,6 +251,33 @@ class AuthenticationTest extends TestCase
             ResendTransport::class,
             Mail::mailer('resend')->getSymfonyTransport(),
         );
+    }
+
+    public function test_resend_configuration_accepts_the_legacy_key_alias(): void
+    {
+        $repository = Env::getRepository();
+        $originalApiKey = Env::get('RESEND_API_KEY');
+        $originalLegacyKey = Env::get('RESEND_KEY');
+
+        try {
+            $repository->clear('RESEND_API_KEY');
+            $repository->set('RESEND_KEY', 're_legacy_key');
+
+            $services = require config_path('services.php');
+
+            $this->assertSame('re_legacy_key', $services['resend']['key']);
+        } finally {
+            $repository->clear('RESEND_API_KEY');
+            $repository->clear('RESEND_KEY');
+
+            if ($originalApiKey !== null) {
+                $repository->set('RESEND_API_KEY', $originalApiKey);
+            }
+
+            if ($originalLegacyKey !== null) {
+                $repository->set('RESEND_KEY', $originalLegacyKey);
+            }
+        }
     }
 
     public function test_login_route_is_rate_limited(): void

@@ -242,6 +242,63 @@ SQL);
         ]);
     }
 
+    public function test_log_workout_retry_after_deletion_replays_the_tombstone(): void
+    {
+        $user = app(CurrentUserResolver::class)->user();
+        $payload = [
+            'raw_input' => 'ring dips 3x8',
+            'idempotency_key' => 'deleted-log-retry',
+            'exercises' => [['raw_phrase' => 'ring dips', 'sets' => array_fill(0, 3, ['reps' => 8])]],
+        ];
+
+        $logged = app(WorkoutLogger::class)->log($user, $payload);
+        $workoutId = $logged['saved_session']['id'];
+
+        app(WorkoutUpdater::class)->delete($user, $workoutId, 'Logged by mistake.', true);
+
+        $replayed = app(WorkoutLogger::class)->log($user, $payload);
+
+        $this->assertTrue($replayed['idempotent_replay']);
+        $this->assertSame($workoutId, $replayed['saved_session']['id']);
+        $this->assertSame('deleted', $replayed['saved_session']['status']);
+        $this->assertSame(1, WorkoutSession::withTrashed()->count());
+    }
+
+    public function test_live_session_retries_after_deletion_replay_the_tombstone(): void
+    {
+        $user = app(CurrentUserResolver::class)->user();
+        $manager = app(WorkoutSessionManager::class);
+        $startPayload = [
+            'name' => 'Live session',
+            'idempotency_key' => 'deleted-live-start',
+        ];
+        $appendPayload = [
+            'raw_input' => 'ring dips 3x8',
+            'idempotency_key' => 'deleted-live-append',
+            'exercise' => [
+                'raw_phrase' => 'ring dips',
+                'sets' => array_fill(0, 3, ['reps' => 8]),
+            ],
+        ];
+
+        $started = $manager->start($user, $startPayload);
+        $workoutId = $started['active_session']['id'];
+        $manager->appendExercise($user, $appendPayload);
+
+        app(WorkoutUpdater::class)->delete($user, $workoutId, 'Logged by mistake.', true);
+
+        $replayedStart = $manager->start($user, $startPayload);
+        $replayedAppend = $manager->appendExercise($user, $appendPayload);
+
+        $this->assertTrue($replayedStart['idempotent_replay']);
+        $this->assertSame($workoutId, $replayedStart['active_session']['id']);
+        $this->assertSame('deleted', $replayedStart['active_session']['status']);
+        $this->assertTrue($replayedAppend['idempotent_replay']);
+        $this->assertSame($workoutId, $replayedAppend['session']['id']);
+        $this->assertSame('deleted', $replayedAppend['session']['status']);
+        $this->assertSame(1, WorkoutSession::withTrashed()->count());
+    }
+
     public function test_log_workout_tool_accepts_compact_repeated_set_payloads(): void
     {
         WorkoutMemoryServer::tool(LogWorkoutTool::class, [

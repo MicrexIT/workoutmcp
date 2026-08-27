@@ -86,7 +86,7 @@ Secrets and generated values:
 
 - `APP_KEY` - generate with `php artisan key:generate --show`.
 - `MCP_PRIVATE_TOKEN` - only needed for any private-token MCP clients; OAuth clients do not use it.
-- `RESEND_KEY` - required for production email when `MAIL_MAILER=resend`.
+- `RESEND_API_KEY` - required for production email when `MAIL_MAILER=resend` (`RESEND_KEY` remains supported as a legacy alias).
 
 Database variables are injected automatically when a Laravel Cloud database resource is attached. Do not hardcode retired server-local database paths.
 
