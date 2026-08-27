@@ -120,6 +120,44 @@ class AuthenticationTest extends TestCase
         $this->assertTrue($user->fresh()->hasVerifiedEmail());
     }
 
+    public function test_verification_link_trusts_forwarded_https_from_the_cloud_load_balancer(): void
+    {
+        $user = User::factory()->unverified()->create();
+
+        $this->actingAs($user)
+            ->withServerVariables($this->cloudProxyServerVariables())
+            ->get($this->cloudProxyUrl($this->verificationUrl($user)))
+            ->assertRedirect()
+            ->assertSessionHas('status', 'Email verified.');
+
+        $this->assertTrue($user->fresh()->hasVerifiedEmail());
+    }
+
+    public function test_verification_link_rejects_a_tampered_signature_behind_the_cloud_load_balancer(): void
+    {
+        $user = User::factory()->unverified()->create();
+
+        $this->actingAs($user)
+            ->withServerVariables($this->cloudProxyServerVariables())
+            ->get($this->cloudProxyUrl($this->verificationUrl($user)).'&tampered=1')
+            ->assertForbidden();
+
+        $this->assertFalse($user->fresh()->hasVerifiedEmail());
+    }
+
+    public function test_verification_link_rejects_a_different_user_behind_the_cloud_load_balancer(): void
+    {
+        $verificationUser = User::factory()->unverified()->create();
+        $authenticatedUser = User::factory()->unverified()->create();
+
+        $this->actingAs($authenticatedUser)
+            ->withServerVariables($this->cloudProxyServerVariables())
+            ->get($this->cloudProxyUrl($this->verificationUrl($verificationUser)))
+            ->assertForbidden();
+
+        $this->assertFalse($verificationUser->fresh()->hasVerifiedEmail());
+    }
+
     public function test_registration_stays_open_after_an_account_exists_by_default(): void
     {
         User::factory()->create();
@@ -312,5 +350,43 @@ class AuthenticationTest extends TestCase
         URL::forceScheme(null);
 
         (new AppServiceProvider($this->app))->boot();
+    }
+
+    private function verificationUrl(User $user): string
+    {
+        URL::forceRootUrl('https://workout-memory.test');
+        URL::forceScheme('https');
+
+        return URL::temporarySignedRoute(
+            'verification.verify',
+            now()->addMinutes(60),
+            [
+                'id' => $user->id,
+                'hash' => sha1($user->email),
+            ],
+        );
+    }
+
+    private function cloudProxyUrl(string $verificationUrl): string
+    {
+        return 'http://workout-memory.test'
+            .parse_url($verificationUrl, PHP_URL_PATH)
+            .'?'.parse_url($verificationUrl, PHP_URL_QUERY);
+    }
+
+    /**
+     * @return array<string, int|string>
+     */
+    private function cloudProxyServerVariables(): array
+    {
+        return [
+            'REMOTE_ADDR' => '10.0.0.10',
+            'HTTP_HOST' => 'workout-memory.test',
+            'SERVER_PORT' => 80,
+            'HTTPS' => 'off',
+            'HTTP_X_FORWARDED_HOST' => 'workout-memory.test',
+            'HTTP_X_FORWARDED_PORT' => '443',
+            'HTTP_X_FORWARDED_PROTO' => 'https',
+        ];
     }
 }
