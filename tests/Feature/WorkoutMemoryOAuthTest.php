@@ -179,6 +179,69 @@ class WorkoutMemoryOAuthTest extends TestCase
         $this->assertSame('state-1', $query['state']);
     }
 
+    public function test_duplicate_login_submission_keeps_the_oauth_authorization_redirect(): void
+    {
+        $user = User::factory()->create([
+            'email' => 'duplicate-oauth-login@example.com',
+            'password' => Hash::make('very-secure-password'),
+        ]);
+        $authorization = $this->authorizationParams();
+        $authorizationPath = '/oauth/authorize?'.http_build_query($authorization);
+        $authorizationUrl = 'https://workout-memory.test'.$authorizationPath;
+
+        $this->get($authorizationPath)
+            ->assertRedirect(route('login'));
+
+        $firstLoginRedirect = $this->post(route('login.store'), [
+            'email' => 'duplicate-oauth-login@example.com',
+            'password' => 'very-secure-password',
+        ])
+            ->assertStatus(302)
+            ->assertSessionHas('auth.oauth_redirect')
+            ->assertSessionMissing('url.intended');
+
+        $this->assertSameAuthorizationUrl($authorizationUrl, (string) $firstLoginRedirect->headers->get('Location'));
+        $this->assertAuthenticatedAs($user);
+        $this->assertSameAuthorizationUrl($authorizationUrl, (string) session('auth.oauth_redirect'));
+
+        $duplicateLoginRedirect = $this->post(route('login.store'), [
+            'email' => 'duplicate-oauth-login@example.com',
+            'password' => 'very-secure-password',
+        ])->assertStatus(302);
+
+        $this->assertSameAuthorizationUrl($authorizationUrl, (string) $duplicateLoginRedirect->headers->get('Location'));
+        $duplicateLoginRedirect->assertSessionMissing('auth.oauth_redirect');
+
+        $this->post(route('login.store'), [
+            'email' => 'duplicate-oauth-login@example.com',
+            'password' => 'very-secure-password',
+        ])->assertRedirect(route('home'));
+
+        $this->get($authorizationPath)
+            ->assertOk()
+            ->assertViewIs('oauth.authorize');
+    }
+
+    public function test_duplicate_login_handoff_rejects_untrusted_urls(): void
+    {
+        $this->actingAs(User::factory()->create());
+
+        $untrustedUrls = [
+            'https://attacker.example/oauth/authorize?client_id=attacker',
+            '//attacker.example/oauth/authorize?client_id=attacker',
+            'https://%',
+            'https://workout-memory.test/oauth/authorize#fragment',
+            'https://workout-memory.test/support',
+        ];
+
+        foreach ($untrustedUrls as $untrustedUrl) {
+            $this->withSession(['auth.oauth_redirect' => $untrustedUrl])
+                ->post(route('login.store'))
+                ->assertRedirect(route('home'))
+                ->assertSessionMissing('auth.oauth_redirect');
+        }
+    }
+
     public function test_unverified_oauth_login_survives_a_verification_email_failure(): void
     {
         $user = User::factory()->unverified()->create([

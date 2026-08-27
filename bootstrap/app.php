@@ -1,5 +1,6 @@
 <?php
 
+use App\Services\WorkoutMemory\OAuthLoginRedirect;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -12,6 +13,14 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->redirectUsersTo(function (Request $request): string {
+            if (! $request->hasSession() || ! $request->routeIs('login', 'login.store')) {
+                return route('home');
+            }
+
+            return app(OAuthLoginRedirect::class)->pull($request) ?? route('home');
+        });
+
         $middleware->trustProxies(
             at: [
                 '173.245.48.0/20',
