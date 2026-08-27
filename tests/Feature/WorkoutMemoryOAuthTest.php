@@ -5,11 +5,14 @@ namespace Tests\Feature;
 use App\Models\User;
 use App\Services\WorkoutMemory\CurrentUserResolver;
 use App\Services\WorkoutMemory\McpOAuthServer;
+use Illuminate\Contracts\Notifications\Dispatcher;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Testing\TestResponse;
+use Mockery\MockInterface;
+use RuntimeException;
 use Tests\TestCase;
 
 class WorkoutMemoryOAuthTest extends TestCase
@@ -174,6 +177,46 @@ class WorkoutMemoryOAuthTest extends TestCase
 
         $this->assertArrayHasKey('code', $query);
         $this->assertSame('state-1', $query['state']);
+    }
+
+    public function test_unverified_oauth_login_survives_a_verification_email_failure(): void
+    {
+        $user = User::factory()->unverified()->create([
+            'email' => 'unverified-oauth@example.com',
+            'password' => Hash::make('very-secure-password'),
+        ]);
+        $authorization = $this->authorizationParams();
+        $authorizationPath = '/oauth/authorize?'.http_build_query($authorization);
+        $authorizationUrl = 'https://workout-memory.test'.$authorizationPath;
+
+        $this->get($authorizationPath)
+            ->assertRedirect(route('login'));
+
+        $loginRedirect = $this->post(route('login.store'), [
+            'email' => 'unverified-oauth@example.com',
+            'password' => 'very-secure-password',
+        ])->assertRedirect();
+
+        $this->assertSameAuthorizationUrl($authorizationUrl, (string) $loginRedirect->headers->get('Location'));
+
+        $this->get($authorizationPath)
+            ->assertRedirect(route('verification.notice'));
+
+        $this->assertSameAuthorizationUrl($authorizationUrl, (string) session('url.intended'));
+
+        $this->mock(Dispatcher::class, function (MockInterface $mock): void {
+            $mock->shouldReceive('send')
+                ->once()
+                ->andThrow(new RuntimeException('The verification email could not be sent.'));
+        });
+
+        $this->from(route('verification.notice'))
+            ->post(route('verification.send'))
+            ->assertRedirect(route('verification.notice'))
+            ->assertSessionHas('status', 'We could not send the verification email. Please try again shortly.');
+
+        $this->assertAuthenticatedAs($user);
+        $this->assertSameAuthorizationUrl($authorizationUrl, (string) session('url.intended'));
     }
 
     public function test_mcp_endpoint_challenges_missing_oauth_token(): void

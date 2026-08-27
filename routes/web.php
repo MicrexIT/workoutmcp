@@ -174,7 +174,13 @@ Route::middleware('auth')->group(function (): void {
     })->middleware(['signed', 'throttle:email-verification'])->name('verification.verify');
 
     Route::post('/email/verification-notification', function (Request $request): RedirectResponse {
-        $request->user()->sendEmailVerificationNotification();
+        try {
+            $request->user()->sendEmailVerificationNotification();
+        } catch (Throwable $exception) {
+            report($exception);
+
+            return back()->with('status', 'We could not send the verification email. Please try again shortly.');
+        }
 
         return back()->with('status', 'Verification link sent.');
     })->middleware('throttle:email-verification')->name('verification.send');
